@@ -1,19 +1,20 @@
 ### 文件夹格式
+```plaintext
 dataset/
-|----dataset_v20250506/
-|--------clip1/
-            view1
-                img1.jpg
-                img1.json
-                img2.jpg
-                img2.json
-                ...
-            view2
-            view3
-            view4
-        clip2
-        ...
-    dataset_v<yyyymmdd>
+|---dataset_v20250506/ 不同的标注版本 v后面是标注日期
+|   |---clip1/  video片段
+|   |   |---view1   相机视角
+|   |   |   |---img1.jpg    图像名
+|   |   |   |---img1.json   对应labelme生成json标注
+|   |   |   |---img2.jpg
+|   |   |   |---img2.json
+|   |   |   |---...
+|   |   |---view2
+|   |   |---view3
+|   |   |---view4
+|   |---clip2
+|   |---...
+|---dataset_v<yyyymmdd>
 
 ### 数据可视化
 

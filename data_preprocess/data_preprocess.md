@@ -20,14 +20,17 @@ dataset/
 ### 数据可视化
 
 ```
-python data_process/data_visualization.py --dataset_v20250506 --labelme 
+python data_process/data_visualization.py --dataset_v20250506 --labelme[labelme/coco/txt/mot]
 ```
 
 ### 数据预处理
 
 #### 转换为TXT格式(用于训练YOLO)
 
+```
 python data_process/data_transfer.py --dataset_v20250506 --yolo
+```
+
 
 #### 转换为COCO格式
 

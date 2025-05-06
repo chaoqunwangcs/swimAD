@@ -1,7 +1,7 @@
 ### 文件夹格式
-dataset
-    dataset_v20250506
-        clip1
+dataset/
+|----dataset_v20250506/
+|--------clip1/
             view1
                 img1.jpg
                 img1.json

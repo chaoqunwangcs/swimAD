@@ -22,7 +22,14 @@
 2. 跟踪模型训练
     1. - [x] 环境搭建
 
-       1. [跟踪环境搭建及指令readme](tracker\readme_mine.md)
+        ```
+        conda create -n swimAD python=3.9 -y
+        conda activate swimAD
+        pip install opencv-python==4.7.0.72
+        pip install "numpy<2"
+        pip install labelme==5.1.1
+        ```
+       1. [跟踪环境搭建及指令readme](tracker/readme_mine.md)
        
         脚本
         '''

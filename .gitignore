@@ -1,0 +1,12 @@
+# ignore the .log(run logs) and .json(transferred annotation) files
+*.log
+*.json
+
+# ignore the data_transfer folders(default save the transferred annotation files)
+data_transfer/
+
+# ignore the logs folders(default save the running logs)
+logs/
+
+# ignore the data_visualtion folders(default save the data visualtion results)
+data_visualtion/

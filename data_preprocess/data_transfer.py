@@ -3,58 +3,61 @@ import os
 import json
 import numpy as np
 import glob
-# Removed: import cv2
+import argparse
 from labelme import utils # Keep for imageData decoding fallback
 import logging
-import datetime # Needed for info and date_captured
+from datetime import datetime # Needed for info and date_captured
 from collections import defaultdict # Needed for dynamic categories
+from tqdm import tqdm
+import pdb 
 
 
-'''
-LABELME_JSON_DIR\  <-- 这是你的 LABELME_JSON_DIR
-            │
-            │   frame_001.json   <-- **你的 LabelMe .json 文件必须直接放在这里
+EXTS = ['.jpg', '.png']
 
-label第一位为跟踪id
-在目标文件夹中，将label分类为正常和异常。
-label中第二位或者第三位置信度为0的，视作异常label。
-默认label第四位作为category id。可选择强制所有label的第四位为1，或者保持label第四位为category id。
+def setup_logging(log_level, log_dir):
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+    current_date = datetime.now().strftime("%Y-%m-%d")
+    log_file = os.path.join(log_dir, f"{current_date}.log")
 
-'''
+    logging.basicConfig(
+        level=log_level,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
+        handlers=[
+            logging.FileHandler(log_file), 
+            logging.StreamHandler()
+        ]
+    )
 
-# --- Configuration Section (Modify these parameters) ---
 
-# 1. Specify the path to your LabelMe annotation files (.json)
-#    *** NOTE: Script relies ONLY on info inside JSON (imagePath, dimensions, imageData) ***
-#    *** NOTE: Expects label format like "l1,l2,l3,l4" or "l1，l2，l3，l4" (handles both comma types) ***
-#    *** NOTE: The 4th value (l4) will be used as the category_id ***
-LABELME_JSON_DIR = r"dataset/dataset_v20250506/noon/3" 
+def parse_arguments():
+    """
+    使用 argparse 解析命令行参数
+    """
+    
+    parser = argparse.ArgumentParser(description=" ")
+    parser.add_argument("-r", "--root", type=str, default="dataset", help="dataset root path")
+    parser.add_argument("-in", "--input_version", type=str, default="dataset_v20250506", help="input version of the dataset")
+    parser.add_argument("-out", "--output_dir", type=str, default="data_transfer", help="output annotation root")
+    parser.add_argument("-t", "--type", type=str, default="coco", help="output annotation types")
 
-# 2. Specify the path where the COCO annotations.json file will be saved
-#    *** NOTE: Images will NOT be copied. ***
-SAVED_COCO_PATH = r"dataset_transfer/yolo_label/label_test" # <<< CHANGE THIS: Use raw string (r"...") - Recommend a dedicated output folder
+    parser.add_argument("-l", "--log-level", choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], default="INFO", help="set log level, default is INFO")
+    args = parser.parse_args()
 
-# 3. Define the output image format (e.g., '.jpg', '.png')
-#    This affects the 'file_name' field in the JSON.
-OUTPUT_IMAGE_EXT = ".jpg"
+    log_level = getattr(logging, args.log_level)
+    setup_logging(log_level, "logs")
 
-# 4. Define a prefix or naming convention for categories based on label_4
-#    The final category name will be f"{CATEGORY_NAME_PREFIX}{label_4_value}"
-#    Example: If label_4 is 5, category name will be "object_5"
-CATEGORY_NAME_PREFIX = "object_"
+    return args
 
-# --- NEW: Control Category Behavior ---
-# Set to True to force all annotations to category_id 1 (like v1.5)
-# Set to False to use the 4th label value as category_id (like v1.6 original)
-FORCE_SINGLE_CATEGORY = False # <<< CHANGE THIS (True or False)
+def ensure_dir(directory_path):
+    """Creates a directory if it doesn't exist."""
+    try:
+        os.makedirs(directory_path, exist_ok=True)
+    except OSError as e:
+        print(f"Error creating directory {directory_path}: {e}")
 
-# Define the name for the single category IF FORCE_SINGLE_CATEGORY is True
-SINGLE_CATEGORY_NAME = "object" # <<< CHANGE THIS if FORCE_SINGLE_CATEGORY is True
 
-# --- End of Configuration Section ---
-
-# Setup logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class Labelme2Coco:
     """
@@ -73,9 +76,17 @@ class Labelme2Coco:
         # Counters for unique IDs
         self.img_id_counter = 1 # Start image IDs from 1
         self.ann_id_counter = 1 # Start annotation IDs from 1
-        # Store unique category IDs (label_4 values) found during processing
-        # Only used if FORCE_SINGLE_CATEGORY is False
+        self.images = []
+        self.annotations = []
         self.found_category_ids = set()
+
+        # hyper-parameter setting
+        self.OUTPUT_IMAGE_EXT = ".jpg"
+        self.CATEGORY_NAME_PREFIX = "object_"
+
+        self.FORCE_SINGLE_CATEGORY = False  # if force using single category
+        self.SINGLE_CATEGORY_NAME = "object"
+
 
     def _parse_custom_label(self, label_str):
         """
@@ -105,15 +116,16 @@ class Labelme2Coco:
             logging.warning(f"Could not convert parts of label '{label_str}' (normalized: '{normalized_label_str}') to integers. Skipping.")
             return None
 
-    def _process_single_json(self, json_path):
+    def _process_single_json(self, folder_path, json_file):
         """Processes a single LabelMe JSON file."""
+        # pdb.set_trace()
         current_img_id = self.img_id_counter
         try:
-            labelme_data = self._read_jsonfile(json_path)
+            labelme_data = self._read_jsonfile(os.path.join(folder_path, json_file))
             if labelme_data is None: return None, []
 
             # Create image entry using only info from JSON file
-            image_info = self._create_image_entry_from_json(labelme_data, json_path, current_img_id)
+            image_info = self._create_image_entry_from_json(labelme_data, folder_path, json_file, current_img_id)
             if image_info is None: return None, []
 
             img_annotations = []
@@ -122,49 +134,47 @@ class Labelme2Coco:
                 if annotation:
                     img_annotations.append(annotation)
                     # Keep track of the category ID used ONLY if not forcing single category
-                    if not FORCE_SINGLE_CATEGORY:
+                    if not self.FORCE_SINGLE_CATEGORY:
                         self.found_category_ids.add(annotation['category_id'])
                     self.ann_id_counter += 1 # Increment annotation ID
 
             self.img_id_counter += 1 # Increment image ID
             return image_info, img_annotations
         except Exception as e:
-            logging.error(f"Error processing JSON file {json_path}: {e}", exc_info=True)
+            logging.error(f"Error processing JSON file {json_file}: {e}", exc_info=True)
             return None, []
 
-    def generate_coco_annotation(self, json_path_list):
+    def generate_coco_annotation(self, folder_path):
         """
         Generates the COCO annotation structure for the given list of LabelMe JSON paths.
         Returns the COCO annotation dictionary with dynamically generated categories based on label_4.
         """
-        self.images = []
-        self.annotations = []
-        self.found_category_ids = set() # Reset found categories for this run
-
-        for json_path in json_path_list:
-            image_info, img_annotations = self._process_single_json(json_path)
+        json_file_list = sorted(list(filter(lambda x: x.endswith('.json'), os.listdir(folder_path))))
+        for json_file in tqdm(json_file_list, desc=f"Processing {folder_path} files: "):
+            image_info, img_annotations = self._process_single_json(folder_path, json_file)
             if image_info:
                 self.images.append(image_info)
                 self.annotations.extend(img_annotations)
 
+    def merge_coco_annotion(self):
         # --- Define categories based on the chosen mode ---
         categories = []
         description_suffix = ""
 
-        if FORCE_SINGLE_CATEGORY:
+        if self.FORCE_SINGLE_CATEGORY:
             # Mode 1: Force single category (like v1.5)
             categories = [{
                 'id': 1,
-                'name': SINGLE_CATEGORY_NAME,
-                'supercategory': SINGLE_CATEGORY_NAME
+                'name': self.SINGLE_CATEGORY_NAME,
+                'supercategory': self.SINGLE_CATEGORY_NAME
             }]
             logging.info(f"FORCE_SINGLE_CATEGORY is True. Using single category definition: {categories}")
-            description_suffix = f" (Forced Category ID 1: {SINGLE_CATEGORY_NAME}, Custom Labels)"
+            description_suffix = f" (Forced Category ID 1: {self.SINGLE_CATEGORY_NAME}, Custom Labels)"
         else:
             # Mode 2: Dynamic categories from label_4 (original v1.6 behavior)
             sorted_category_ids = sorted(list(self.found_category_ids))
             for cat_id in sorted_category_ids:
-                category_name = f"{CATEGORY_NAME_PREFIX}{int(cat_id)}"
+                category_name = f"{self.CATEGORY_NAME_PREFIX}{int(cat_id)}"
                 categories.append({
                     'id': int(cat_id),
                     'name': category_name,
@@ -174,7 +184,7 @@ class Labelme2Coco:
             logging.info(f"Category definitions: {categories}")
             description_suffix = " (Category ID from label_4, Custom Labels)"
 
-        now = datetime.datetime.now()
+        now = datetime.now()
         coco_format = {
             'info': {
                 'description': f'Converted LabelMe annotations to COCO format{description_suffix}',
@@ -188,7 +198,7 @@ class Labelme2Coco:
         }
         return coco_format
 
-    def _create_image_entry_from_json(self, labelme_data, json_path, current_img_id):
+    def _create_image_entry_from_json(self, labelme_data, folder_path, json_file, current_img_id):
         """
         Creates the image entry for the COCO format using ONLY info from the LabelMe JSON.
         Does not attempt to find or read external image files.
@@ -198,36 +208,37 @@ class Labelme2Coco:
 
         # 1. Determine filename for COCO JSON 'file_name' field
         if image_path_in_json:
+            # pdb.set_trace()
             # Use the filename provided in the JSON's imagePath field
-            output_filename = os.path.splitext(os.path.basename(image_path_in_json))[0] + OUTPUT_IMAGE_EXT
+            output_filename = os.path.join(folder_path, image_path_in_json)
         else:
             # Fallback: use the JSON filename itself as the base for 'file_name'
-            output_filename = os.path.splitext(os.path.basename(json_path))[0] + OUTPUT_IMAGE_EXT
-            logging.warning(f"'imagePath' not found in {json_path}. Using JSON filename for 'file_name' field: {output_filename}")
+            output_filename = os.path.join(folder_path, json_file.replace(".png",self.OUTPUT_IMAGE_EXT))
+            logging.warning(f"'imagePath' not found in {json_file}. Using JSON filename for 'file_name' field: {output_filename}")
 
         # 2. Get image dimensions
         # Priority: imageHeight/imageWidth fields > imageData > Error
         if 'imageHeight' in labelme_data and 'imageWidth' in labelme_data:
              h = labelme_data['imageHeight']
              w = labelme_data['imageWidth']
-             logging.debug(f"Using image dimensions from JSON fields for {json_path}")
+             logging.debug(f"Using image dimensions from JSON fields for {json_file}")
         elif labelme_data.get('imageData'):
              try:
                  img_arr = utils.img_b64_to_arr(labelme_data['imageData'])
                  h, w = img_arr.shape[:2]
-                 logging.debug(f"Using image dimensions from imageData for {json_path}")
+                 logging.debug(f"Using image dimensions from imageData for {json_file}")
              except Exception as e:
-                 logging.error(f"Could not decode imageData in {json_path} to get dimensions: {e}")
+                 logging.error(f"Could not decode imageData in {json_file} to get dimensions: {e}")
                  # Cannot determine dimensions, fail this image entry
                  return None
         else:
              # Dimensions are required, cannot proceed without them
-             logging.error(f"Cannot determine image dimensions for {json_path}: Missing 'imageHeight'/'imageWidth' fields and 'imageData'.")
+             logging.error(f"Cannot determine image dimensions for {json_file}: Missing 'imageHeight'/'imageWidth' fields and 'imageData'.")
              return None
 
         # Validate dimensions
         if not isinstance(h, (int, float)) or not isinstance(w, (int, float)) or h <= 0 or w <= 0:
-            logging.error(f"Invalid image dimensions (h={h}, w={w}) found or determined for {json_path}.")
+            logging.error(f"Invalid image dimensions (h={h}, w={w}) found or determined for {json_file}.")
             return None
 
 
@@ -235,7 +246,7 @@ class Labelme2Coco:
         image_entry = {
             'id': current_img_id, 'width': int(w), 'height': int(h), 'file_name': output_filename, # Ensure width/height are ints
             'license': 1, 'flickr_url': '', 'coco_url': '',
-            'date_captured': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'date_captured': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         }
         return image_entry
 
@@ -248,6 +259,7 @@ class Labelme2Coco:
         - Adds line_color field.
         - Sets segmentation to [].
         """
+        # pdb.set_trace()
         label_str = shape.get('label')
         points = shape.get('points')
         shape_type = shape.get('shape_type', 'polygon')
@@ -264,7 +276,7 @@ class Labelme2Coco:
              return None # Skip if label parsing failed
 
         # *** Determine category_id based on the mode ***
-        if FORCE_SINGLE_CATEGORY:
+        if self.FORCE_SINGLE_CATEGORY:
             category_id = 1
         else:
             # Use the 4th label as category_id (original v1.6 logic)
@@ -285,11 +297,10 @@ class Labelme2Coco:
             'bbox': [],
             'area': 0.0,
             # Add custom label fields
-            'label_1': custom_labels[0],
-            'label_2': custom_labels[1],
-            'label_3': custom_labels[2],
-            'label_4': custom_labels[3], # Keep label_4 field as well if needed
-            # Add line color if available
+            'label_1': custom_labels[0],    # need modified
+            'label_2': custom_labels[1],    # need modified
+            'label_3': custom_labels[2],    # need modified
+            'label_4': custom_labels[3],    # need modified
             'line_color': line_color if line_color else None,
         }
 
@@ -410,63 +421,104 @@ class Labelme2Coco:
         except Exception as e:
             logging.error(f"Failed to save COCO JSON to {save_path}: {e}")
 
-# --- Main Execution Logic ---
+
+def transfer_to_coco(folders, save_path):
+
+    converter = Labelme2Coco()
+    for folder in folders:
+        # pdb.set_trace()
+        converter.generate_coco_annotation(folder)
+    
+    coco_annotation = converter.merge_coco_annotion()
+
+    # save
+    converter.save_coco_json(coco_annotation, save_path)
+    logging.info(f"Processed {len(coco_annotation['images'])} images and {len(coco_annotation.get('annotations', []))} annotations.") # Use .get for annotations too
+    logging.info(f"Total unique categories created: {len(coco_annotation.get('categories', []))}")
+    logging.info("LabelMe to COCO conversion finished! (Category from label_4, custom labels, no segmentation)")
+
+
+
+    
+
+
+
+
+def main(args):
+
+    logging.info(f"Starting recursive search for dataset version: {args.input_version}")
+    logging.info(f"transfed {args.type} format annotation will be saved under: {args.output_dir}")
+    # parse video clips and views of a dataset
+    all_view_folders = []
+    dataset_path = os.path.join(args.root, args.input_version)
+    clips = os.listdir(dataset_path)
+    for clip in clips:
+        clip_path = os.path.join(dataset_path, clip)
+        views = os.listdir(clip_path)
+        for view in views:
+            view_path = os.path.join(clip_path, view)
+            all_view_folders.append(view_path)
+    if args.type == 'coco':
+        save_path = os.path.join(args.output_dir, f"annotation_coco.json")
+        transfer_to_coco(all_view_folders, save_path)
+    
+    elif args.type == 'txt':   # for YOLO model
+        pass
+    
+    elif args.type == 'mot': # for MOT task
+        pass
+
+    else:
+        raise NotImplementedError(f"This function not support {args.type} format!")
+
 if __name__ == '__main__':
 
-    # --- Validate Configuration ---
-    if not os.path.isdir(LABELME_JSON_DIR):
-        logging.error(f"LabelMe JSON directory not found: {LABELME_JSON_DIR}")
-        exit(1) # Use non-zero exit code for errors
-    if not SAVED_COCO_PATH:
-         logging.error("Output COCO path (SAVED_COCO_PATH) is not specified.")
-         exit(1)
-    if not CATEGORY_NAME_PREFIX:
-        logging.warning("CATEGORY_NAME_PREFIX is empty. Category names will just be the label_4 numbers.")
+    args = parse_arguments()
+    main(args)
 
 
-    # --- Create Output Directory ---
-    try:
-        # Check if path exists and is a directory, create if not
-        if not os.path.exists(SAVED_COCO_PATH):
-             os.makedirs(SAVED_COCO_PATH, exist_ok=True)
-             logging.info(f"Created output directory: {SAVED_COCO_PATH}")
-        elif not os.path.isdir(SAVED_COCO_PATH):
-             logging.error(f"Output path {SAVED_COCO_PATH} exists but is not a directory.")
-             exit(1)
-        else:
-             logging.info(f"Output directory already exists: {SAVED_COCO_PATH}")
 
-    except Exception as e:
-        logging.error(f"Could not create or access output directory {SAVED_COCO_PATH}: {e}")
-        exit(1)
+    # if not os.path.isdir(LABELME_JSON_DIR):
+    #     logging.error(f"LabelMe JSON directory not found: {LABELME_JSON_DIR}")
+    #     exit(1) # Use non-zero exit code for errors
+    # if not SAVED_COCO_PATH:
+    #      logging.error("Output COCO path (SAVED_COCO_PATH) is not specified.")
+    #      exit(1)
+    # if not CATEGORY_NAME_PREFIX:
+    #     logging.warning("CATEGORY_NAME_PREFIX is empty. Category names will just be the label_4 numbers.")
 
 
-    # --- Find LabelMe JSON files ---
-    json_pattern = os.path.join(LABELME_JSON_DIR, "*.json")
-    json_list_path = glob.glob(json_pattern) # Get all JSON file paths
-    if not json_list_path:
-        logging.error(f"No JSON files found in directory: {LABELME_JSON_DIR} with pattern '*.json'")
-        exit(1)
-    logging.info(f"Found {len(json_list_path)} JSON files in {LABELME_JSON_DIR}")
+    # # --- Create Output Directory ---
+    # try:
+    #     # Check if path exists and is a directory, create if not
+    #     if not os.path.exists(SAVED_COCO_PATH):
+    #          os.makedirs(SAVED_COCO_PATH, exist_ok=True)
+    #          logging.info(f"Created output directory: {SAVED_COCO_PATH}")
+    #     elif not os.path.isdir(SAVED_COCO_PATH):
+    #          logging.error(f"Output path {SAVED_COCO_PATH} exists but is not a directory.")
+    #          exit(1)
+    #     else:
+    #          logging.info(f"Output directory already exists: {SAVED_COCO_PATH}")
 
-    # --- Initialize Converter ---
-    converter = Labelme2Coco()
-
-    # --- Process All Data ---
-    logging.info("Starting LabelMe to COCO conversion process...")
-    coco_instance = converter.generate_coco_annotation(json_list_path) # Generate annotations
-
-    # --- Save COCO JSON ---
-    if coco_instance and coco_instance.get('images'): # Check if any images were processed using .get for safety
-        coco_json_path = os.path.join(SAVED_COCO_PATH, 'annotations.json') # Define output path
-        converter.save_coco_json(coco_instance, coco_json_path) # Save JSON
-        logging.info(f"Processed {len(coco_instance['images'])} images and {len(coco_instance.get('annotations', []))} annotations.") # Use .get for annotations too
-        logging.info(f"Total unique categories created: {len(coco_instance.get('categories', []))}")
-    elif coco_instance:
-        logging.warning("Conversion finished, but no valid images were processed or found in the output.")
-    else:
-        logging.error("Conversion failed to produce a COCO instance.")
+    # except Exception as e:
+    #     logging.error(f"Could not create or access output directory {SAVED_COCO_PATH}: {e}")
+    #     exit(1)
 
 
-    logging.info("LabelMe to COCO conversion finished! (Category from label_4, custom labels, no segmentation)")
+    # # --- Find LabelMe JSON files ---
+    # json_pattern = os.path.join(LABELME_JSON_DIR, "*.json")
+    # json_list_path = glob.glob(json_pattern) # Get all JSON file paths
+    # if not json_list_path:
+    #     logging.error(f"No JSON files found in directory: {LABELME_JSON_DIR} with pattern '*.json'")
+    #     exit(1)
+    # logging.info(f"Found {len(json_list_path)} JSON files in {LABELME_JSON_DIR}")
+
+    # # --- Initialize Converter ---
+    # converter = Labelme2Coco()
+
+    # # --- Process All Data ---
+    # logging.info("Starting LabelMe to COCO conversion process...")
+    # coco_instance = converter.generate_coco_annotation(json_list_path) # Generate annotations
+
+
 

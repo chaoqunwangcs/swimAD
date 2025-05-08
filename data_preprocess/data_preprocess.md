@@ -25,21 +25,21 @@ python data_process/data_visualization.py --input_version dataset_v20250506 --la
 
 ### 数据预处理
 
-#### 转换为TXT格式(用于训练YOLO)
+1. - [] 转换为TXT格式(用于训练YOLO)
 
 ```
 python data_process/data_transfer.py --input_version dataset_v20250506 --label_format yolo
 ```
 
 
-#### 转换为COCO格式
+2. - [x] 转换为COCO格式
 
 ```
 python data_process/data_transfer.py --input_version dataset_v20250506 --label_format coco
 ```
 
 
-#### 转换为MOT17格式（用于训练MOT）
+3. - [x] 转换为MOT17格式（用于训练MOT）
 
 ```
 python data_process/data_transfer.py --input_version dataset_v20250506 --label_format mot

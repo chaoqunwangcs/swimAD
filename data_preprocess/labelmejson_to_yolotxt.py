@@ -31,10 +31,13 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 # --- 配置路径 ---
 # 输入 JSON 文件的根目录 (脚本将查找其下两层的 .json 文件)
-json_base_dir = r"G:\project\20250423游泳池数据最新标签修改返回" # 包含两层子目录的根路径
+# json_base_dir = r"G:\project\20250423游泳池数据最新标签修改返回" # 包含两层子目录的根路径
+json_base_dir = r'dataset/dataset_v20250506'
+normal_txt_dir = r'./tmp'
+abnormal_txt_dir = r'./tmp'
 # 输出目录
-normal_txt_dir = r"G:\project\20250423游泳池数据最新标签修改返回__processed\yolo_label\label_test"   
-abnormal_txt_dir = r"G:\project\20250423游泳池数据最新标签修改返回__processed\yolo_label\label_test" # 存放异常标签的目录(置信度l2=0 or l3=0)
+# normal_txt_dir = r"G:\project\20250423游泳池数据最新标签修改返回__processed\yolo_label\label_test"   
+# abnormal_txt_dir = r"G:\project\20250423游泳池数据最新标签修改返回__processed\yolo_label\label_test" # 存放异常标签的目录(置信度l2=0 or l3=0)
 
 # --- 标签解析函数 ---
 def _parse_custom_label(label_str):

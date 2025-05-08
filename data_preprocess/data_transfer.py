@@ -40,7 +40,7 @@ def parse_arguments():
     parser.add_argument("-r", "--root", type=str, default="dataset", help="dataset root path")
     parser.add_argument("-in", "--input_version", type=str, default="dataset_v20250506", help="input version of the dataset")
     parser.add_argument("-out", "--output_dir", type=str, default="data_transfer", help="output annotation root")
-    parser.add_argument("-t", "--type", type=str, default="coco", help="output annotation types")
+    parser.add_argument("-lf", "--label_format", type=str, choices=["coco", "yolo", "mot"], default="labelme", help="the annotation types")
 
     parser.add_argument("-l", "--log-level", choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], default="INFO", help="set log level, default is INFO")
     args = parser.parse_args()
@@ -57,7 +57,33 @@ def ensure_dir(directory_path):
     except OSError as e:
         print(f"Error creating directory {directory_path}: {e}")
 
+def parse_custom_label(label_str):
+    """
+    Parses the LabelMe custom label string "l1,l2,l3,l4" or "l1，l2，l3，l4".
+    Handles both half-width (,) and full-width (，) commas.
+    Returns a tuple (label_1, label_2, label_3, label_4) as integers.
+    Returns None if parsing fails or format is incorrect.
+    """
+    if not label_str:
+        logging.warning("Empty label string encountered.")
+        return None
 
+    # *** FIX: Replace full-width comma with half-width comma ***
+    normalized_label_str = label_str.replace('，', ',')
+
+    parts = normalized_label_str.split(',')
+    if len(parts) != 4:
+        # Log the original string for better debugging
+        logging.warning(f"Label string '{label_str}' (normalized: '{normalized_label_str}') does not have 4 parts after normalization. Skipping.")
+        return None
+    try:
+        # Convert parts to integers
+        labels = tuple(int(p.strip()) for p in parts)
+        return labels
+    except ValueError:
+        # Log the original string for better debugging
+        logging.warning(f"Could not convert parts of label '{label_str}' (normalized: '{normalized_label_str}') to integers. Skipping.")
+        return None
 
 class Labelme2Coco:
     """
@@ -87,34 +113,6 @@ class Labelme2Coco:
         self.FORCE_SINGLE_CATEGORY = False  # if force using single category
         self.SINGLE_CATEGORY_NAME = "object"
 
-
-    def _parse_custom_label(self, label_str):
-        """
-        Parses the LabelMe custom label string "l1,l2,l3,l4" or "l1，l2，l3，l4".
-        Handles both half-width (,) and full-width (，) commas.
-        Returns a tuple (label_1, label_2, label_3, label_4) as integers.
-        Returns None if parsing fails or format is incorrect.
-        """
-        if not label_str:
-            logging.warning("Empty label string encountered.")
-            return None
-
-        # *** FIX: Replace full-width comma with half-width comma ***
-        normalized_label_str = label_str.replace('，', ',')
-
-        parts = normalized_label_str.split(',')
-        if len(parts) != 4:
-            # Log the original string for better debugging
-            logging.warning(f"Label string '{label_str}' (normalized: '{normalized_label_str}') does not have 4 parts after normalization. Skipping.")
-            return None
-        try:
-            # Convert parts to integers
-            labels = tuple(int(p.strip()) for p in parts)
-            return labels
-        except ValueError:
-            # Log the original string for better debugging
-            logging.warning(f"Could not convert parts of label '{label_str}' (normalized: '{normalized_label_str}') to integers. Skipping.")
-            return None
 
     def _process_single_json(self, folder_path, json_file):
         """Processes a single LabelMe JSON file."""
@@ -270,9 +268,9 @@ class Labelme2Coco:
             return None
 
         # Parse the custom label string
-        custom_labels = self._parse_custom_label(label_str)
+        custom_labels = parse_custom_label(label_str)
         if custom_labels is None:
-             # Warning is already logged in _parse_custom_label
+             # Warning is already logged in parse_custom_label
              return None # Skip if label parsing failed
 
         # *** Determine category_id based on the mode ***
@@ -438,16 +436,105 @@ def transfer_to_coco(folders, save_path):
     logging.info("LabelMe to COCO conversion finished! (Category from label_4, custom labels, no segmentation)")
 
 
+def transfer_to_mot_video(folder, save_path):
+    # pdb.set_trace()
+    json_file_list = sorted(list(filter(lambda x: x.endswith('.json'), os.listdir(folder))))
+    frame_id = 0
+    normal_annotations = []
+    abnormal_annotations = []   # with cls conf < 1     # box conf need put in mot_line
+    for json_file in tqdm(json_file_list, desc=f"Processing {folder} files: "):
+        frame_id += 1
+        json_file_path = os.path.join(folder, json_file)
 
+        try:
+            with open(json_file_path, 'r', encoding='utf-8') as f:
+                json_data = json.load(f)
+            
+                img_height = json_data.get('imageHeight')
+                img_width = json_data.get('imageWidth')
+                shapes = json_data.get('shapes', [])
+                assert img_height is not None and img_width is not None
+                assert isinstance(img_height, (int, float)) and isinstance(img_width, (int, float))
+                assert img_height > 0 or img_width > 0
+
+                for shape in shapes:
+                    label_str = shape.get('label')
+                    points = shape.get('points')
+                    shape_type = shape.get('shape_type')
+
+                    if shape_type != 'rectangle' or label_str is None or points is None or len(points) != 2:
+                        logging.info(f"  Skipping invalid/non-rectangle annotation in {filename}: {shape}")
+                        continue
+                    
+                    parsed_labels = parse_custom_label(label_str)
+                    if parsed_labels is None:
+                        logging.error(f"Parsing label error for {label_str}")
+                        pdb.set_trace()
+                    
+                    track_id = parsed_labels[0]
+                    category_id = parsed_labels[3]
+
+                    try:
+                        x1, y1 = map(float, points[0])
+                        x2, y2 = map(float, points[1])
+                    except (ValueError, TypeError):
+                        logging.error(f"  Skipping annotation with invalid coords in {filename}: {points}")
+                        pdb.set_trace()
+                    
+                    bb_left = round(min(x1, x2))
+                    bb_top = round(min(y1, y2))
+                    bb_width = round(abs(x1 - x2))
+                    bb_height = round(abs(y1 - y2))
+                    if bb_width <= 0 or bb_height <= 0:
+                        logging.error(f"  Skipping annotation with zero size in {filename}: w={bb_width}, h={bb_height}")
+                        pdb.set_trace()
+                    
+                    conf = 1.0  # need modified, the true conf is annotated
+                    world_x, world_y, world_z = -1, -1, -1
+
+                    mot_line = f"{frame_id},{track_id},{bb_left},{bb_top},{bb_width},{bb_height},{conf},{category_id},{world_x},{world_y},{world_z}"
+                    
+                    if parsed_labels[1] == 0 or parsed_labels[2] == 0:
+                        abnormal_annotations.append(mot_line)
+                    else:
+                        normal_annotations.append(mot_line)
+
+        except:
+            logging.warning(f"process failed in {json_file_path}.")
+        
     
+    normal_annotations.sort(key=lambda x: int(mot_line.split(',')[0]))
+    abnormal_annotations.sort(key=lambda x: int(mot_line.split(',')[0]))
+
+    normal_annotations_file_path = os.path.join(save_path, 'normal_seq.tx')
+    abnormal_annotations_file_path = os.path.join(save_path, 'abnormal_seq.tx')
+
+    if normal_annotations:
+        with open(normal_annotations_file_path, 'w', encoding='utf-8') as f:
+            f.write("\n".join(normal_annotations) + "\n")
+    else: logging.info(f"No normal annotations found for {json_file_path}.")
+
+    if abnormal_annotations:
+        with open(abnormal_annotations_file_path, 'w', encoding='utf-8') as f:
+            f.write("\n".join(abnormal_annotations) + "\n")
+    else: logging.info(f"No abnormal annotations found for {json_file_path}.")
+
+    logging.info(f"Finished processing directory {json_file_path}.")
 
 
+def transfer_to_mot(folders, save_path):
+    for folder in folders:
+        data_root, data_version, clip_id, view_id = folder.split('/')
+        save_folder_path = os.path.join(save_path, clip_id, view_id); ensure_dir(save_folder_path)
+        transfer_to_mot_video(folder, save_folder_path)
+
+    logging.info(f"Finished processeing {len(folders)} videos.")
 
 
 def main(args):
 
     logging.info(f"Starting recursive search for dataset version: {args.input_version}")
-    logging.info(f"transfed {args.type} format annotation will be saved under: {args.output_dir}")
+    logging.info(f"transfed {args.label_format} format annotation will be saved under: {args.output_dir}")
     # parse video clips and views of a dataset
     all_view_folders = []
     dataset_path = os.path.join(args.root, args.input_version)
@@ -458,18 +545,19 @@ def main(args):
         for view in views:
             view_path = os.path.join(clip_path, view)
             all_view_folders.append(view_path)
-    if args.type == 'coco':
-        save_path = os.path.join(args.output_dir, f"annotation_coco.json")
+    if args.label_format == 'coco':
+        save_path = os.path.join(args.output_dir, f"annotation_coco_{args.input_version}.json")
         transfer_to_coco(all_view_folders, save_path)
     
-    elif args.type == 'txt':   # for YOLO model
-        pass
+    elif args.label_format == 'yolo':   # for YOLO model
+        raise NotImplementedError(f"This function not support {args.input_version} format! comming soon")
     
-    elif args.type == 'mot': # for MOT task
-        pass
+    elif args.label_format == 'mot': # for MOT task
+        save_path = os.path.join(args.output_dir, "mot",f"{args.input_version}")
+        transfer_to_mot(all_view_folders, save_path)
 
     else:
-        raise NotImplementedError(f"This function not support {args.type} format!")
+        raise NotImplementedError(f"This function not support {args.input_version} format!")
 
 if __name__ == '__main__':
 

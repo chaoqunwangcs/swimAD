@@ -36,6 +36,7 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description=" ")
     parser.add_argument("-r", "--root", type=str, default="dataset", help="dataset root path")
     parser.add_argument("-in", "--input_version", type=str, default="dataset_v20250506", help="input version of the dataset")
+    parser.add_argument("-lf", "--label_format", type=str, choices=["labelme", "coco", "yolo", "mot"], default="labelme", help="the annotation types")
     parser.add_argument("-out", "--output_dir", type=str, default="data_visualtion", help="input version of the dataset")
 
     parser.add_argument("-l", "--log-level", choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], default="INFO", help="set log level, default is INFO")

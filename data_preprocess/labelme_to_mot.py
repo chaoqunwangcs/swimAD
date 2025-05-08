@@ -34,11 +34,18 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 # --- Configure Paths ---
 # Input JSON base directory (script will look for .json files two levels down)
-json_base_dir = r"G:\project\20250423游泳池数据最新标签修改返回" # 包含TARGET_DEPTH层子目录的根路径
-# Output base directory where the mirrored structure will be created
-output_base_dir = r"G:\project\20250423游泳池数据最新标签修改返回__processed\mot_label_structured" # Base directory for structured output
-normal_seq_filename = "normal_seq.txt"    # Filename for the consolidated normal sequence within each subfolder
-abnormal_seq_filename = "abnormal_seq.txt"  # Filename for the consolidated abnormal sequence within each subfolder
+# json_base_dir = r"G:\project\20250423游泳池数据最新标签修改返回" # 包含TARGET_DEPTH层子目录的根路径
+# # Output base directory where the mirrored structure will be created
+# output_base_dir = r"G:\project\20250423游泳池数据最新标签修改返回__processed\mot_label_structured" # Base directory for structured output
+# normal_seq_filename = "normal_seq.txt"    # Filename for the consolidated normal sequence within each subfolder
+# abnormal_seq_filename = "abnormal_seq.txt"  # Filename for the consolidated abnormal sequence within each subfolder
+
+
+json_base_dir = r'dataset/dataset_v20250506'
+output_base_dir = r'./tmp'
+normal_seq_filename = 'normal_seq.txt'
+abnormal_seq_filename = "abnormal_seq.txt" 
+
 TARGET_DEPTH = 2 # Process directories exactly this many levels below json_base_dir
 
 # --- Label Parsing Function ---

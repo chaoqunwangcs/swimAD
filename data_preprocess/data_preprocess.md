@@ -20,7 +20,7 @@ dataset/
 ### 数据可视化
 
 ```
-python data_process/data_visualization.py --dataset_v20250506 --labelme[labelme/coco/txt/mot]
+python data_process/data_visualization.py --input_version dataset_v20250506 --label_format labelme[labelme/coco/txt/mot]
 ```
 
 ### 数据预处理
@@ -28,20 +28,20 @@ python data_process/data_visualization.py --dataset_v20250506 --labelme[labelme/
 #### 转换为TXT格式(用于训练YOLO)
 
 ```
-python data_process/data_transfer.py --dataset_v20250506 --yolo
+python data_process/data_transfer.py --input_version dataset_v20250506 --label_format yolo
 ```
 
 
 #### 转换为COCO格式
 
 ```
-python data_process/data_transfer.py --dataset_v20250506 --coco
+python data_process/data_transfer.py --input_version dataset_v20250506 --label_format coco
 ```
 
 
 #### 转换为MOT17格式（用于训练MOT）
 
 ```
-python data_process/data_transfer.py --dataset_v20250506 --mot
+python data_process/data_transfer.py --input_version dataset_v20250506 --label_format mot
 ```
 

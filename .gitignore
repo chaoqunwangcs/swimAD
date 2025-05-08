@@ -2,11 +2,15 @@
 *.log
 *.json
 
-# ignore the data_transfer folders(default save the transferred annotation files)
+# ignore the data_transfer and dataset folders(default save the original and transferred annotation files)
 data_transfer/
+dataset/
 
 # ignore the logs folders(default save the running logs)
 logs/
 
 # ignore the data_visualtion folders(default save the data visualtion results)
 data_visualtion/
+
+# ignore the files in tmp forlder
+tmp/

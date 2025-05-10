@@ -6,11 +6,13 @@
 data_transfer/
 dataset/
 
-# ignore the logs folders(default save the running logs)
-logs/
 
-# ignore the data_visualtion folders(default save the data visualtion results)
+
+# ignore and checkpoints folders(default save the saved checkpoints)
+ckpts/
+
+# ignore the running logs files, such as data_visualtion, logs, run_logs, and tmp file folders(default save the log results)
 data_visualtion/
-
-# ignore the files in tmp forlder
+logs/
+boxmot/runs/
 tmp/

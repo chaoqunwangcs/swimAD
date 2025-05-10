@@ -25,42 +25,12 @@
         ```
         conda create -n swimAD python=3.9 -y
         conda activate swimAD
-        pip install opencv-python==4.7.0.72
-        pip install "numpy<2"
-        pip install labelme==5.1.1
+        pip install -r requirements.txt
+        cd boxmot
+        pip install .
         ```
-       1. [跟踪环境搭建及指令readme](tracker/readme_mine.md)
-       
-        脚本
-        '''
        
     2. - [x] [数据预处理](data_preprocess/data_preprocess.md)
-       
-       ```
-       \data_process文件夹
-       ```
-    
-       **`labelmejson_display_on_photos.py`**
-       
-       - **作用**: 将 LabelMe 标注工具生成的 JSON 文件中的标注信息（边界框、标签）可视化地绘制到对应的图片上。
-       
-       **`labelmejson_to_yolotxt.py`**
-       
-       - **作用**: 将 LabelMe 的 JSON 标注格式转换为 YOLO (You Only Look Once) 模型训练所需的 TXT 格式。
-       
-       **`labelme_to_coco.py`**
-       
-       - **作用**: 将 LabelMe 的 JSON 标注格式转换为 COCO (Common Objects in Context) 数据集格式。
-       
-       **`labelme_to_mot.py`** 
-       
-       - **作用**: 将 LabelMe 的 JSON 标注格式转换为 MOT (Multiple Object Tracking) Challenge 数据集格式。
-       
-       **`yolotxt_to_coco.py`**
-       
-       - **作用**: 将 YOLO 的 TXT 标注格式转换为 COCO 数据集格式。
-       
-       
        
     3. - [x] 检测模型训练（YOLO）
     
@@ -92,8 +62,11 @@
     
     6. - [x] 多目标跟踪推理和评测 （）
        
-        '''
-        脚本
+        '''inference
+
+        python -m tracking.track --source $video_path$[webcam(0)/.mp4/.jpg/path/url] --yolo-model $yolo_ckpt_path$ --tracking-method $track_method$[ocsort/deepocsort/...] --save-txt --device 0
+        
+        python -m tracking.track --source ../dataset/dataset_v20250506/noon/1/ --yolo-model ../ckpts/yolo11L_epoch250.pt --tracking-method ocsort --save-txt --device 0
         '''
 
     #### TODO List

@@ -66,10 +66,18 @@
 
         '''
         python -m tracking.track --source `video_path`[webcam(0)/.mp4/.jpg/path/url] --yolo-model `yolo_ckpt_path` --tracking-method `track_method`[ocsort/deepocsort/...] --save-txt --device `GPU_id`
-        
+
         python -m tracking.track --source ../dataset/dataset_v20250506/noon/1/ --yolo-model ../ckpts/yolo11L_epoch250.pt --tracking-method ocsort --save-txt --device 0
         '''
 
+    7. -[x] 单视角溺水检测（基于[规则](rules.md)）
+
+        ```
+        python -m tracking.swimAD --source `video_path`[webcam(0)/.mp4/.jpg/path/url] --yolo-model `yolo_ckpt_path` --tracking-method ocsort --save_AD --device 0
+
+        python -m tracking.swimAD --source ../dataset/dataset_v20250506/noon/1/ --yolo-model ../ckpts/yolo11L_epoch250.pt --tracking-method ocsort --save_AD --save-txt --device 0
+        ```
+        
     #### TODO List
     1. - [ ] 代码库修改，代码格式对齐一下
     2. - [ ] 用pretrain VL model处理第一批数据，提升检测准确率

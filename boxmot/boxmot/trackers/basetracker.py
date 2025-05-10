@@ -2,10 +2,12 @@ import numpy as np
 import cv2 as cv
 import hashlib
 import colorsys
+from itertools import islice
 from abc import ABC, abstractmethod
 from boxmot.utils import logger as LOGGER
 from boxmot.utils.iou import AssociationFunction
 
+import pdb
 
 class BaseTracker(ABC):
     def __init__(
@@ -237,7 +239,7 @@ class BaseTracker(ABC):
         
         return bgr
 
-    def plot_box_on_img(self, img: np.ndarray, box: tuple, conf: float, cls: int, id: int, thickness: int = 2, fontscale: float = 0.5) -> np.ndarray:
+    def plot_box_on_img(self, img: np.ndarray, box: tuple, conf: float, cls: int, id: int, thickness: int = 2, fontscale: float = 0.5, is_AD=False) -> np.ndarray:
         """
         Draws a bounding box with ID, confidence, and class information on an image.
 
@@ -262,24 +264,25 @@ class BaseTracker(ABC):
             box_poly = np.int_(rotrec)  # Convert to integer
 
             # Draw the rectangle on the image
-            img = cv.polylines(img, [box_poly], isClosed=True, color=self.id_to_color(id), thickness=thickness)
+            color = self.id_to_color(id) if not is_AD else (0,0,255),   # red for AD objects
+            img = cv.polylines(img, [box_poly], isClosed=True, color=color, thickness=thickness)
 
+            
             img = cv.putText(
                 img,
-                f'id: {int(id)}, conf: {conf:.2f}, c: {int(cls)}, a: {box[4]:.2f}',
+                f'id: {int(id)}, conf: {conf:.2f}, c: {int(cls)}',
                 (int(box[0]), int(box[1]) - 10),
                 cv.FONT_HERSHEY_SIMPLEX,
                 fontscale,
-                self.id_to_color(id),
+                self.id_to_color(id),   # red for AD objects
                 thickness
             )
-        else :
-
+        else:
             img = cv.rectangle(
                 img,
                 (int(box[0]), int(box[1])),
                 (int(box[2]), int(box[3])),
-                self.id_to_color(id),
+                self.id_to_color(id) if not is_AD else (0,0,255),   # red for AD objects
                 thickness
             )
             img = cv.putText(
@@ -316,7 +319,7 @@ class BaseTracker(ABC):
                     img,
                     (int(box[0]), int(box[1])),
                     2,
-                    color=self.id_to_color(int(id)),
+                    self.id_to_color(id) if not is_AD else (0,0,255),   # red for AD objects
                     thickness=trajectory_thickness 
                 )
             else:
@@ -326,7 +329,7 @@ class BaseTracker(ABC):
                     (int((box[0] + box[2]) / 2),
                     int((box[1] + box[3]) / 2)), 
                     2,
-                    color=self.id_to_color(int(id)),
+                    self.id_to_color(id) if not is_AD else (0,0,255),   # red for AD objects
                     thickness=trajectory_thickness
                 )
         return img
@@ -371,3 +374,68 @@ class BaseTracker(ABC):
                 
         return img
 
+    def calc_dist(self, box1, box2):
+        center1 = np.array([(box1[0] + box1[2]) / 2, (box1[1] + box1[3]) / 2])
+        center2 = np.array([(box2[0] + box2[2]) / 2, (box2[1] + box2[3]) / 2])
+        distance = np.linalg.norm(center1 - center2)
+        return distance
+
+    def detect_AD(self) -> list[np.ndarray]:
+        """
+        detect the AD swimmer
+        
+        """
+
+        AD_list = []
+        for a in self.active_tracks:
+            if a.history_observations:
+                # rule 1: 80% under water for 20s, freq=2Hz, frame=40frame
+                window_size = 20
+                cls_thres = 0.8
+                if len(a.history_observations) > window_size:
+                    history_observations = list(islice(a.history_observations, len(a.history_observations) - window_size, len(a.history_observations)))
+                    clses = [x[-1]==2 for x in history_observations]
+                    if sum(clses) / window_size >= cls_thres:
+                        AD_list.append(a)
+                
+                # rule 2: moving distance < 100 pixel
+                dist_thres = 100
+                if len(a.history_observations) > window_size:
+                    history_observations = list(islice(a.history_observations, len(a.history_observations) - window_size, len(a.history_observations)))
+                    box_0 = history_observations[0]
+                    box_1 = history_observations[1]
+                    distance = self.calc_dist(box_0, box_1)
+                    if distance <= dist_thres:
+                        AD_list.append(a)
+
+        # if len(AD_list) > 0:
+        #     pdb.set_trace()  
+        return AD_list
+
+
+    def plot_AD_results(self, img: np.ndarray, show_trajectories: bool, AD_list: list, thickness: int = 4, fontscale: float = 0.5) -> np.ndarray:
+        """
+        Visualizes the trajectories of all active tracks on the image. For each track,
+        it draws the latest bounding box and the path of movement if the history of
+        observations is longer than two. This helps in understanding the movement patterns
+        of each tracked object.
+
+        Parameters:
+        - img (np.ndarray): The image array on which to draw the trajectories and bounding boxes.
+        - show_trajectories (bool): Whether to show the trajectories.
+        - thickness (int): The thickness of the bounding box.
+        - fontscale (float): The font scale for the text.
+
+        Returns:
+        - np.ndarray: The image array with trajectories and bounding boxes of all active tracks.
+        """
+        for a in AD_list:
+            if a.history_observations:
+                if len(a.history_observations) > 2:
+                    # pdb.set_trace()
+                    box = a.history_observations[-1]
+                    img = self.plot_box_on_img(img, box, a.conf, a.cls, a.id, thickness, fontscale, is_AD=True)
+                    if show_trajectories:
+                        img = self.plot_trackers_trajectories(img, a.history_observations, a.id)
+                
+        return img

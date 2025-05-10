@@ -12,7 +12,7 @@ from boxmot.utils.association import associate, linear_assignment
 from boxmot.trackers.basetracker import BaseTracker
 from boxmot.utils.ops import xyxy2xysr
 from boxmot.motion.kalman_filters.obb.xywha_kf import KalmanBoxTrackerOBB
-
+import pdb
 
 def k_previous_obs(observations, cur_age, k, is_obb=False):
     if len(observations) == 0:
@@ -152,7 +152,9 @@ class KalmanBoxTracker(object):
             """
             self.last_observation = bbox
             self.observations[self.age] = bbox
-            self.history_observations.append(bbox)
+            # pdb.set_trace()
+            # self.history_observations.append(bbox)  
+            self.history_observations.append(np.append(bbox, cls))  # add the cls label for swimAD
 
             self.time_since_update = 0
             self.hits += 1
@@ -293,6 +295,7 @@ class OcSort(BaseTracker):
         """
             First round of association
         """
+        # pdb.set_trace()
         matched, unmatched_dets, unmatched_trks = associate(
             dets[:, 0:5+self.is_obb], trks, self.asso_func, self.asso_threshold, velocities, k_observations, self.inertia, w, h
         )

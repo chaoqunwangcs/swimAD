@@ -64,7 +64,7 @@
        
        inference
         '''
-        python -m tracking.track --source [video_path][webcam(0)/.mp4/.jpg/path/url] --yolo-model $yolo_ckpt_path$ --tracking-method $track_method$[ocsort/deepocsort/...] --save-txt --device 0
+        python -m tracking.track --source `video_path`[webcam(0)/.mp4/.jpg/path/url] --yolo-model $yolo_ckpt_path$ --tracking-method $track_method$[ocsort/deepocsort/...] --save-txt --device 0
         
         python -m tracking.track --source ../dataset/dataset_v20250506/noon/1/ --yolo-model ../ckpts/yolo11L_epoch250.pt --tracking-method ocsort --save-txt --device 0
         '''

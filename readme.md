@@ -62,29 +62,30 @@
     
     6. - [x] 多目标跟踪推理和评测 （）
         
-        1. -[ ] 推理
+        1. -[x] 推理
+            1. -[x] 无参跟踪器(ocsort/bytetrack/)，利用--tracking-method指定跟踪器即可
         ```
-        python -m tracking.track --source `video_path`[webcam(0)/.mp4/.jpg/path/url] --yolo-model `yolo_ckpt_path` --tracking-method `track_method`[ocsort/deepocsort/...] --save-txt --device `GPU_id`
+        python -m tracking.track --source `video_path`[webcam(0)/.mp4/.jpg/path/url] --yolo-model `yolo_ckpt_path` --tracking-method `track_method`[ocsort/] --save-txt --device `GPU_id`
         ```
-
+            2. -[x] 有参跟踪器(boosttrack/botsort/strongsort/deepocsort/imprassoc)，利用--tracking-method指定跟踪器，利用--reid-model制定reid参数[lmbn_n_cuhk03_d.pt/osnet_x0_25_market1501.pt/osnet_x1_0_msmt17.pt].
         例如：
         ```
-        python -m tracking.track --source ../dataset/dataset_v20250506/noon/1/ --yolo-model ../ckpts/yolo11L_epoch250.pt --tracking-method ocsort --save-txt --device 0
+        python -m tracking.track --source ../dataset/dataset_v20250506/noon/1/ --yolo-model ../ckpts/yolo11L_epoch250.pt --tracking-method deepocsort --reid-model osnet_x0_25_market1501.pt --save-txt --device 0
         ```
         2. -[ ] 评测
         ```
         coming soon
         ```
 
-        
+
     7. -[x] 单视角溺水检测（基于[规则](rules.md)）
 
         ```
-        python -m tracking.swimAD --source `video_path`[webcam(0)/.mp4/.jpg/path/url] --yolo-model `yolo_ckpt_path` --tracking-method ocsort --save_AD --device 0
+        python -m tracking.swimAD --source `video_path`[webcam(0)/.mp4/.jpg/path/url] --yolo-model `yolo_ckpt_path` --tracking-method ocsort --save-video --device 0
         ```
         例如：
         ```
-        python -m tracking.swimAD --source ../dataset/dataset_v20250506/noon/1/ --yolo-model ../ckpts/yolo11L_epoch250.pt --tracking-method ocsort --save_AD --save-txt --device 0
+        python -m tracking.swimAD --source ../dataset/dataset_v20250506/noon/1/ --yolo-model ../ckpts/yolo11L_epoch250.pt --tracking-method ocsort --save-video --save-txt --device 0
         ```
 
     #### TODO List

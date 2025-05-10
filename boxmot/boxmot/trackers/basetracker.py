@@ -390,22 +390,25 @@ class BaseTracker(ABC):
         for a in self.active_tracks:
             if a.history_observations:
                 # rule 1: 80% under water for 20s, freq=2Hz, frame=40frame
-                window_size = 20
-                cls_thres = 0.8
-                if len(a.history_observations) > window_size:
-                    history_observations = list(islice(a.history_observations, len(a.history_observations) - window_size, len(a.history_observations)))
+                window_size_rule1 = 20
+                cls_thres_rule1 = 0.8
+                if len(a.history_observations) > window_size_rule1:
+                    history_observations = list(islice(a.history_observations, len(a.history_observations) - window_size_rule1, len(a.history_observations)))
                     clses = [x[-1]==2 for x in history_observations]
-                    if sum(clses) / window_size >= cls_thres:
+                    if sum(clses) / window_size_rule1 >= cls_thres_rule1:
                         AD_list.append(a)
                 
-                # rule 2: moving distance < 100 pixel
-                dist_thres = 100
-                if len(a.history_observations) > window_size:
-                    history_observations = list(islice(a.history_observations, len(a.history_observations) - window_size, len(a.history_observations)))
+                # rule 2: moving distance < 100 pixel，且判别为岸上的人的概率小于10%
+                window_size_rule2 = 20
+                dist_thres_rule2 = 100
+                cls_thres_rule2 = 0.5
+                if len(a.history_observations) > window_size_rule2:
+                    history_observations = list(islice(a.history_observations, len(a.history_observations) - window_size_rule2, len(a.history_observations)))
+                    clses = [x[-1]==2 for x in history_observations]
                     box_0 = history_observations[0]
                     box_1 = history_observations[1]
                     distance = self.calc_dist(box_0, box_1)
-                    if distance <= dist_thres:
+                    if distance <= dist_thres_rule2 and sum(clses) / window_size_rule2 >= cls_thres_rule2:
                         AD_list.append(a)
 
         # if len(AD_list) > 0:

@@ -117,7 +117,7 @@ def run(args):
     # store custom args in predictor
     yolo.predictor.custom_args = args
 
-    if args.save_AD is True:
+    if args.save_video is True:
         all_imgs = []
 
     for r in results:
@@ -131,7 +131,7 @@ def run(args):
             
             # print("Detect AD swimmer")
 
-        if args.save_AD is True:
+        if args.save_video is True:
             all_imgs.append(img)
 
         if args.show is True:
@@ -141,7 +141,7 @@ def run(args):
                 break
 
     # pdb.set_trace()
-    if args.save_AD is True:
+    if args.save_video is True:
         video_path = os.path.join(args.project, 'output_video.mp4')
         frame_size = all_imgs[0].shape[1], all_imgs[0].shape[0]
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
@@ -174,9 +174,8 @@ def parse_opt():
                         help='display tracking video results')
     parser.add_argument('--save', action='store_true',
                         help='save video tracking results')
-
-    parser.add_argument('--save_AD', action='store_true',
-                        help='save video AD results')
+    parser.add_argument('--save-video', action='store_true',
+                        help='save video tracking results in .mp4 format')
 
     # class 0 is person, 1 is bycicle, 2 is car... 79 is oven
     parser.add_argument('--classes', nargs='+', type=int,

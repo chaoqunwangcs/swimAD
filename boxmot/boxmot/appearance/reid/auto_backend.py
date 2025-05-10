@@ -106,7 +106,7 @@ class ReidAutoBackend():
         files = [file] if isinstance(file, (str, Path)) else list(file)
 
         for f in files:
-            file_suffix = Path(f).suffix.lower()
+            file_suffix = Path(f).suffix.lower().replace('.pth','.pt')
             if file_suffix and file_suffix not in suffix:
                 LOGGER.error(f"File {f} does not have an acceptable suffix. Expected: {suffix}")
 
@@ -121,7 +121,6 @@ class ReidAutoBackend():
         Returns:
             Tuple[bool, ...]: A tuple of booleans indicating the model type, corresponding to pt, jit, onnx, xml, engine, and tflite.
         """
-
         sf = list(export_formats().Suffix)  # export suffixes
         self.check_suffix(p, sf)  # checks
         types = [s in Path(p).name for s in sf]

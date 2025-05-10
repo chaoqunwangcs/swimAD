@@ -1,5 +1,6 @@
 # Mikel Broström 🔥 Yolo Tracking 🧾 AGPL-3.0 license
 
+import os
 import argparse
 import cv2
 import numpy as np
@@ -115,15 +116,33 @@ def run(args):
     # store custom args in predictor
     yolo.predictor.custom_args = args
 
+
+    if args.save_video is True:
+        all_imgs = []
+
     for r in results:
         # pdb.set_trace()
         img = yolo.predictor.trackers[0].plot_results(r.orig_img, args.show_trajectories)
+
+        if args.save_video is True:
+            all_imgs.append(img)
 
         if args.show is True:
             cv2.imshow('BoxMOT', img)     
             key = cv2.waitKey(1) & 0xFF
             if key == ord(' ') or key == ord('q'):
                 break
+
+
+    if args.save_video is True:
+        video_path = os.path.join(args.project, 'output_video.mp4')
+        frame_size = all_imgs[0].shape[1], all_imgs[0].shape[0]
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        fps = 2
+        out = cv2.VideoWriter(video_path, fourcc, fps, frame_size)
+        for img in all_imgs:
+            out.write(img)
+        out.release()
 
 
 def parse_opt():
@@ -149,6 +168,9 @@ def parse_opt():
                         help='display tracking video results')
     parser.add_argument('--save', action='store_true',
                         help='save video tracking results')
+    parser.add_argument('--save-video', action='store_true',
+                        help='save video tracking results in .mp4 format')
+
     # class 0 is person, 1 is bycicle, 2 is car... 79 is oven
     parser.add_argument('--classes', nargs='+', type=int,
                         help='filter by class: --classes 0, or --classes 0 2 3')

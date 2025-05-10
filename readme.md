@@ -77,7 +77,7 @@
 
         例如：
         ```
-        python -m tracking.track --source ../dataset/dataset_v20250506/noon/1/ --yolo-model ../ckpts/yolo11L_epoch250.pt --tracking-method deepocsort --reid-model osnet_x0_25_market1501.pt --save-txt --device 0
+        python -m tracking.track --source ../dataset/dataset_v20250506/noon/1/ --yolo-model ../ckpts/yolo11L_epoch250.pt --tracking-method deepocsort --reid-model osnet_x0_25_market1501.pt --show-trajectories --device 0
         ```
         2. -[ ] 评测
         ```
@@ -92,7 +92,7 @@
         ```
         例如：
         ```
-        python -m tracking.swimAD --source ../dataset/dataset_v20250506/noon/1/ --yolo-model ../ckpts/yolo11L_epoch250.pt --tracking-method ocsort --save-video --save-txt --device 0
+        python -m tracking.swimAD --source ../dataset/dataset_v20250506/noon/1/ --yolo-model ../ckpts/yolo11L_epoch250.pt --tracking-method ocsort --save-video --show-trajectories --device 0
         ```
 
     #### TODO List
@@ -100,7 +100,8 @@
     2. - [ ] 用pretrain VL model处理第一批数据，提升检测准确率
     3. - [ ] 设计多视角联合检测问题，主要难点是不同视角下物体的对应关系，应该需要相机参数（位置，角度），也许多视角投影至3D空间进行统一，因为是在2D空间标注的，这个想法需要验证
     4. - [ ] 设计多视角联合跟踪问题
-    5. - [ ] 基于单视角检测结果，设计rule-based规则，判断是否溺水
+    5. - [x] 基于单视角检测结果，设计rule-based规则，判断是否溺水
+    6. - [ ] 更新rules规则，大家可以写在[规则](rules.md)文件中
 
 
 

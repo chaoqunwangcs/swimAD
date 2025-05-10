@@ -142,7 +142,8 @@ def run(args):
 
     # pdb.set_trace()
     if args.save_video is True:
-        video_path = os.path.join(args.project, 'output_video.mp4')
+        os.makedirs(args.project, exist_ok=True)
+        video_path = os.path.join(args.project, 'output_video_AD.mp4')
         frame_size = all_imgs[0].shape[1], all_imgs[0].shape[0]
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         fps = 2

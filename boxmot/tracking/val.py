@@ -103,7 +103,7 @@ def prompt_overwrite(path_type: str, path: str, ci: bool = True) -> bool:
         LOGGER.debug(f"{path_type} {path} already exists. Use existing due to no UI mode.")
         return False
 
-    def input_with_timeout(prompt, timeout=3.0):
+    def input_with_timeout(prompt, timeout=20.0):
         print(prompt, end='', flush=True)
 
         result = []
@@ -128,7 +128,7 @@ def prompt_overwrite(path_type: str, path: str, ci: bool = True) -> bool:
     return input_with_timeout(f"{path_type} {path} already exists. Overwrite? [y/N]: ")
 
 
-def generate_dets_embs(args: argparse.Namespace, y: Path, source: Path) -> None:
+def generate_dets_embs(args: argparse.Namespace, y: Path, source: Path, sequence_name_for_files: str) -> None:
     """
     Generates detections and embeddings for the specified 
     arguments, YOLO model and source.
@@ -183,37 +183,71 @@ def generate_dets_embs(args: argparse.Namespace, y: Path, source: Path) -> None:
 
     reids = []
     for r in args.reid_model:
-        reid_model = ReidAutoBackend(weights=args.reid_model,
+        reid_model = ReidAutoBackend(weights=r,
                                      device=yolo.predictor.device,
                                      half=args.half).model
         reids.append(reid_model)
-        embs_path = args.project / 'dets_n_embs' / y.stem / 'embs' / r.stem / (source.parent.name + '.txt')
+        embs_path = args.project / 'dets_n_embs' / y.stem / 'embs' / r.stem / (sequence_name_for_files + '.txt')
         embs_path.parent.mkdir(parents=True, exist_ok=True)
         embs_path.touch(exist_ok=True)
 
         if os.path.getsize(embs_path) > 0:
-            open(embs_path, 'w').close()
+            if prompt_overwrite('Embeddings file', embs_path, args.ci):
+                open(embs_path, 'w').close()
+            else:
+                LOGGER.debug(f"Skipping overwrite for existing embeddings file {embs_path}")
+        else:
+            embs_path.touch(exist_ok=True)
 
     yolo.predictor.custom_args = args
 
-    dets_path = args.project / 'dets_n_embs' / y.stem / 'dets' / (source.parent.name + '.txt')
+    dets_path = args.project / 'dets_n_embs' / y.stem / 'dets' / (sequence_name_for_files + '.txt')
     dets_path.parent.mkdir(parents=True, exist_ok=True)
     dets_path.touch(exist_ok=True)
 
     if os.path.getsize(dets_path) > 0:
-        open(dets_path, 'w').close()
+        if prompt_overwrite('Detections file', dets_path, args.ci):
+            open(dets_path, 'w').close()
+        else:
+            LOGGER.debug(f"Skipping overwrite for existing detections file {dets_path}")
+    else:
+        dets_path.touch(exist_ok=True)
 
-    with open(str(dets_path), 'ab+') as f:
-        np.savetxt(f, [], fmt='%f', header=str(source))
+    # --- Start: Ensure files are cleared and headers written before loop ---
+    # Clear/create detections file and write header
+    with open(str(dets_path), 'wb') as f: # Use 'wb' to clear and write bytes
+        # Simpler header: just the source path, use os.linesep for consistency
+        header_line = f"# {str(source)}{os.linesep}".encode('utf-8')
+        f.write(header_line)
 
-    for frame_idx, r in enumerate(tqdm(results, desc="Frames")):
+    # Clear/create embeddings file and write header
+    for reid_config_path in args.reid_model: # Iterate through configured reid models
+        # Construct embs_path using sequence_name_for_files and current reid model's stem
+        current_embs_path = args.project / 'dets_n_embs' / y.stem / 'embs' / reid_config_path.stem / (sequence_name_for_files + '.txt')
+        current_embs_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(str(current_embs_path), 'wb') as f: # Use 'wb' to clear and write bytes
+            # Simpler header: just the source path and reid model, use os.linesep
+            header_line = f"# Reid: {reid_config_path.stem}, Source: {str(source)}{os.linesep}".encode('utf-8')
+            f.write(header_line)
+    # --- End: Ensure files are cleared and headers written before loop ---
+
+    for frame_idx, r in enumerate(tqdm(results, desc=f"Processing {sequence_name_for_files}")):
         nr_dets = len(r.boxes)
-        frame_idx = torch.full((1, 1), frame_idx + 1).repeat(nr_dets, 1)
+        # frame_idx here is 0-based from enumerate, results from yolo might have different frame indexing if it's from a video
+        # The original code used frame_idx + 1 directly for MOT format, which is typical (1-based frames)
+        # For dets file, it also used frame_idx + 1.
+        # Let's ensure yolo.stream=True gives per-frame results, and frame_idx is the simple counter.
+        # The problem is if `results` itself contains frame numbers, this enumerate `frame_idx` might be misleading.
+        # However, yolo() with stream=True typically yields results per image/frame processed.
+        # Let's assume this frame_idx from enumerate is fine for now for the .txt file.
+
+        # Ensure current_frame_num_for_dets is 1-based for the detection file
+        current_frame_num_for_dets = torch.full((1, 1), frame_idx + 1).repeat(nr_dets, 1)
         img = r.orig_img
 
         dets = np.concatenate(
             [
-                frame_idx,
+                current_frame_num_for_dets, # Use 1-based frame index for saving
                 r.boxes.xyxy.to('cpu'),
                 r.boxes.conf.unsqueeze(1).to('cpu'),
                 r.boxes.cls.unsqueeze(1).to('cpu'),
@@ -226,13 +260,26 @@ def generate_dets_embs(args: argparse.Namespace, y: Path, source: Path) -> None:
                         (np.maximum(0, boxes[:, 1]) < np.minimum(boxes[:, 3], img.shape[0])))
         dets = dets[boxes_filter]
 
+        # Skip frame if no valid detections after filtering
+        if dets.shape[0] == 0:
+            continue
+
         with open(str(dets_path), 'ab+') as f:
             np.savetxt(f, dets, fmt='%f')
 
+        # Generate and save embeddings only if detections exist for the frame
         for reid, reid_model_name in zip(reids, args.reid_model):
+            # Ensure embeddings are calculated for the same filtered detections
             embs = reid.get_features(dets[:, 1:5], img)
-            embs_path = args.project / "dets_n_embs" / y.stem / 'embs' / reid_model_name.stem / (source.parent.name + '.txt')
-            with open(str(embs_path), 'ab+') as f:
+
+            # Check consistency within the frame (optional but good practice)
+            if embs.shape[0] != dets.shape[0]:
+                 LOGGER.warning(f"Frame {frame_idx + 1}: Mismatch between detections ({dets.shape[0]}) and generated embeddings ({embs.shape[0]}) for {reid_model_name.stem}. Skipping embedding save for this frame.")
+                 continue # Skip saving embeddings for this specific Reid model/frame
+
+            # Construct embs_path using sequence_name_for_files for saving this specific embedding
+            current_embs_path_for_saving = args.project / "dets_n_embs" / y.stem / 'embs' / reid_model_name.stem / (sequence_name_for_files + '.txt')
+            with open(str(current_embs_path_for_saving), 'ab+') as f:
                 np.savetxt(f, embs, fmt='%f')
 
 
@@ -258,24 +305,77 @@ def generate_mot_results(args: argparse.Namespace, config_dict: dict = None) -> 
         config_dict
     )
 
-    with open(args.dets_file_path, 'r') as file:
-        source = Path(file.readline().strip().replace("# ", ""))
+    # Add encoding='utf-8' for reading the header line safely
+    with open(args.dets_file_path, 'r', encoding='utf-8') as file:
+        first_line = file.readline()
+        # Use regex to extract path after #, allowing for optional space
+        match = re.match(r"^#\s*(.*)", first_line)
+        if match:
+            source_str = match.group(1).strip() # Get captured group and strip whitespace
+            # Change to INFO level to ensure visibility
+            # LOGGER.info(f"Validating parsed header path: '{source_str}'") # <-- Remove this, seems ineffective in threads
+            temp_source_path = Path(source_str)
+            if not temp_source_path.is_dir(): # Check if the extracted path is a directory
+                # Modify the error message to include the problematic path
+                error_msg = f"Parsed header path '{source_str}' from {args.dets_file_path} is not a valid directory."
+                LOGGER.error(error_msg)
+                raise ValueError(error_msg) # Raise error with the path included
+            # -- End: Add validation --
+            # Path is validated, now assign it to the main source variable
+            source = temp_source_path
+        else:
+            # Handle case where header is missing or malformed
+            LOGGER.error(f"Could not parse header line in {args.dets_file_path}. Expected '# path\\n', got: {first_line.strip()}")
+            raise ValueError(f"Invalid header format in {args.dets_file_path}")
 
-    dets = np.loadtxt(args.dets_file_path, skiprows=1)
-    embs = np.loadtxt(args.embs_file_path)
+    # Specify encoding='utf-8' for loadtxt to handle potential UTF-8 headers/comments
+    dets = np.loadtxt(args.dets_file_path, skiprows=1, encoding='utf-8')
+    # Add encoding here too for robustness, although embs file might not have header
+    # The embs_file_path should correspond to the specific reid model used for this run.
+    # args.reid_model[0] was used to construct the embs_folder in run_generate_mot_results.
+    # So args.embs_file_path is specific to that one reid model.
+    embs = np.loadtxt(args.embs_file_path, encoding='utf-8', skiprows=1)
+
+    # Add check for row count consistency
+    if dets.shape[0] != embs.shape[0]:
+        raise ValueError(
+            f"Row count mismatch between detections ({dets.shape[0]}) and embeddings ({embs.shape[0]})\n"
+            f"Dets file: {args.dets_file_path}\n"
+            f"Embs file: {args.embs_file_path}\n"
+            f"This indicates an issue during the detection/embedding generation process."
+        )
 
     dets_n_embs = np.concatenate([dets, embs], axis=1)
 
-    dataset = LoadImagesAndVideos(source)
+    # 处理图片直接在序列目录下的情况
+    if (source / 'img1').is_dir():
+        # 传统结构：图片在img1子目录
+        img_dir = source / 'img1' # This 'source' is from dets header, e.g. .../mysequence
+    else:
+        # 新结构：图片直接在序列目录下
+        img_dir = source
+        
+    dataset = LoadImagesAndVideos(img_dir)
 
-    txt_path = args.exp_folder_path / (source.parent.name + '.txt')
+    # MOT result txt_path should use the actual sequence name, which is source.name
+    txt_path = args.exp_folder_path / (source.name + '.txt')
     all_mot_results = []
 
     # Change FPS
     if args.fps:
 
         # Extract original FPS
-        conf_path = source.parent / 'seqinfo.ini'
+        # 判断是否使用自定义gt文件夹来读取seqinfo.ini
+        if hasattr(args, 'custom_gt_folder') and args.custom_gt_folder:
+            seq_dir = Path(args.custom_gt_folder) / source.parent.name
+            conf_path = seq_dir / 'seqinfo.ini'
+        else:
+            conf_path = source.parent / 'seqinfo.ini'
+            
+        # 如果source就是序列根目录（图片直接放在序列目录下的情况），则直接在source下寻找seqinfo.ini
+        if not conf_path.exists() and source.is_dir():
+            conf_path = source / 'seqinfo.ini'
+            
         conf = configparser.ConfigParser()
         conf.read(conf_path)
 
@@ -297,9 +397,10 @@ def generate_mot_results(args: argparse.Namespace, config_dict: dict = None) -> 
     # Create list with frame numbers according to needed step
     frame_nums = np.arange(1, len(dataset) + 1, step).astype(int).tolist()
 
-    seq_frame_nums = {source.parent.name: frame_nums.copy()}
+    # seq_frame_nums key should be the actual sequence name (source.name)
+    seq_frame_nums = {source.name: frame_nums.copy()}
 
-    for frame_num, d in enumerate(tqdm(dataset, desc=source.parent.name), 1):
+    for frame_num, d in enumerate(tqdm(dataset, desc=source.name), 1):
         # Filter using list with needed numbers
         if len(frame_nums) > 0:
             if frame_num < frame_nums[0]:
@@ -364,26 +465,49 @@ def trackeval(args: argparse.Namespace, seq_paths: list, save_dir: Path, MOT_res
         str: Standard output from the evaluation script.
     """
 
-    d = [seq_path.parent.name for seq_path in seq_paths]
+    d = [seq_path.name for seq_path in seq_paths]
 
-    args = [
+    # 使用自定义的gt文件夹路径（如果指定）
+    if hasattr(args, 'custom_gt_folder') and args.custom_gt_folder:
+        actual_gt_folder = Path(args.custom_gt_folder)
+        LOGGER.info(f"使用自定义ground truth文件夹进行评估: {actual_gt_folder}")
+    else:
+        actual_gt_folder = gt_folder
+
+    # Build the arguments list for run_mot_challenge.py
+    trackeval_cmd_args = [
         sys.executable, EXAMPLES / 'val_utils' / 'scripts' / 'run_mot_challenge.py',
-        "--GT_FOLDER", str(gt_folder),
-        "--BENCHMARK", "",
-        "--TRACKERS_FOLDER", args.exp_folder_path,
-        "--TRACKERS_TO_EVAL", "",
-        "--SPLIT_TO_EVAL", "train",
+        "--GT_FOLDER", str(actual_gt_folder),
+        "--BENCHMARK", "", # Set benchmark to empty since we use custom GT folder
+        "--TRACKERS_FOLDER", args.exp_folder_path, # Folder containing the tracker output .txt files
+        "--TRACKERS_TO_EVAL", "", # Evaluate the specific tracker folder created
+        "--SPLIT_TO_EVAL", "train", # This might need adjustment depending on GT structure, but often needed
         "--METRICS", *metrics,
         "--USE_PARALLEL", "True",
-        "--TRACKER_SUB_FOLDER", "",
+        "--TRACKER_SUB_FOLDER", "", # Tracker results are directly in TRACKERS_FOLDER
         "--NUM_PARALLEL_CORES", str(4),
-        "--SKIP_SPLIT_FOL", "True",
-        "--GT_LOC_FORMAT", "{gt_folder}/{seq}/gt/gt_temp.txt",
-        "--SEQ_INFO", *d
+        "--SKIP_SPLIT_FOL", "True", # Important if GT data is directly in GT_FOLDER/seq_name/gt
+        "--GT_LOC_FORMAT", "{gt_folder}/{seq}/normal_seq.txt", # Path structure for GT files
+        # Disable default preprocessing (class filtering)
+        "--DO_PREPROC", "False"
     ]
 
+    # Add class filtering argument if specified
+    if args.eval_classes is not None:
+        # Convert class IDs to strings for command line
+        class_ids_str = [str(c) for c in args.eval_classes]
+        trackeval_cmd_args.extend(["--CLASSES_TO_EVAL", *class_ids_str])
+
+    # Add sequence info last
+    trackeval_cmd_args.extend(["--SEQ_INFO", *d])
+
+    # Print the command being executed for debugging
+    # Convert all args to strings before joining for logging
+    cmd_str_for_log = ' '.join(map(str, trackeval_cmd_args))
+    LOGGER.debug(f"Running TrackEval command: {cmd_str_for_log}")
+
     p = subprocess.Popen(
-        args=args,
+        args=trackeval_cmd_args,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True
@@ -403,11 +527,23 @@ def run_generate_dets_embs(opt: argparse.Namespace) -> None:
     Args:
         opt (Namespace): Parsed command line arguments.
     """
-    mot_folder_paths = sorted([item for item in Path(opt.source).iterdir()])
+    mot_folder_paths = sorted([item for item in Path(opt.source).iterdir() if item.is_dir()])
     for y in opt.yolo_model:
         for i, mot_folder_path in enumerate(mot_folder_paths):
-            dets_path = Path(opt.project) / 'dets_n_embs' / y.stem / 'dets' / (mot_folder_path.name + '.txt')
-            embs_path = Path(opt.project) / 'dets_n_embs' / y.stem / 'embs' / (opt.reid_model[0].stem) / (mot_folder_path.name + '.txt')
+            # Determine the actual source path for images (either mot_folder_path or mot_folder_path / 'img1')
+            current_sequence_source_path = mot_folder_path
+            if (mot_folder_path / 'img1').is_dir():
+                current_sequence_source_path = mot_folder_path / 'img1'
+            elif not (any(mot_folder_path.glob('*.jpg')) or any(mot_folder_path.glob('*.png'))):
+                LOGGER.warning(f'未在{mot_folder_path}找到图片或img1子目录，跳过')
+                continue
+
+            # Use current_sequence_source_path.name (which is the sequence name like 'mysequence') for file naming
+            sequence_name = mot_folder_path.name # mot_folder_path itself is the sequence directory, e.g., .../test2/mysequence
+            
+            dets_path = Path(opt.project) / 'dets_n_embs' / y.stem / 'dets' / (sequence_name + '.txt')
+            embs_path = Path(opt.project) / 'dets_n_embs' / y.stem / 'embs' / (opt.reid_model[0].stem) / (sequence_name + '.txt')
+            
             if dets_path.exists() and embs_path.exists():
                 if prompt_overwrite('Detections and Embeddings', dets_path, opt.ci):
                     LOGGER.debug(f'Overwriting detections and embeddings for {mot_folder_path}...')
@@ -415,7 +551,8 @@ def run_generate_dets_embs(opt: argparse.Namespace) -> None:
                     LOGGER.debug(f'Skipping generation for {mot_folder_path} as they already exist.')
                     continue
             LOGGER.debug(f'Generating detections and embeddings for data under {mot_folder_path} [{i + 1}/{len(mot_folder_paths)} seqs]')
-            generate_dets_embs(opt, y, source=mot_folder_path / 'img1')
+            
+            generate_dets_embs(opt, y, source=current_sequence_source_path, sequence_name_for_files=sequence_name)
 
 
 def process_single_mot(opt: argparse.Namespace, d: Path, e: Path, evolve_config: dict):
@@ -437,6 +574,9 @@ def run_generate_mot_results(opt: argparse.Namespace, evolve_config: dict = None
         exp_folder_path = increment_path(path=exp_folder_path, sep="_", exist_ok=False)
         opt.exp_folder_path = exp_folder_path
 
+        # Ensure the experiment folder exists before any operations
+        opt.exp_folder_path.mkdir(parents=True, exist_ok=True)
+
         mot_folder_names = [item.stem for item in Path(opt.source).iterdir()]
         
         dets_folder = opt.project / "dets_n_embs" / y.stem / 'dets'
@@ -452,6 +592,8 @@ def run_generate_mot_results(opt: argparse.Namespace, evolve_config: dict = None
         ])
         
         LOGGER.info(f"\nStarting tracking on:\n\t{opt.source}\nwith preloaded dets\n\t({dets_folder.relative_to(ROOT)})\nand embs\n\t({embs_folder.relative_to(ROOT)})\nusing\n\t{opt.tracking_method}")
+        if hasattr(opt, 'custom_gt_folder') and opt.custom_gt_folder:
+            LOGGER.info(f"将使用自定义ground truth文件夹: {opt.custom_gt_folder}")
 
         tasks = []
         # Create a thread pool to run each file pair in parallel
@@ -521,6 +663,7 @@ def parse_opt() -> argparse.Namespace:
     parser.add_argument('--yolo-model', nargs='+', type=Path, default=[WEIGHTS / 'yolov8n.pt'], help='yolo model path')
     parser.add_argument('--reid-model', nargs='+', type=Path, default=[WEIGHTS / 'osnet_x0_25_msmt17.pt'], help='reid model path')
     parser.add_argument('--source', type=str, help='file/dir/URL/glob, 0 for webcam')
+    parser.add_argument('--custom-gt-folder', type=str, help='自定义ground truth文件夹的路径')
     parser.add_argument('--imgsz', '--img', '--img-size', nargs='+', type=int, default=None, help='inference size h,w')
     parser.add_argument('--fps', type=int, default=None, help='video frame-rate')
     parser.add_argument('--conf', type=float, default=0.01, help='min confidence threshold')
@@ -544,6 +687,7 @@ def parse_opt() -> argparse.Namespace:
     parser.add_argument('--objectives', type=str, nargs='+', default=["HOTA", "MOTA", "IDF1"], help='set of objective metrics: HOTA,MOTA,IDF1')
     parser.add_argument('--val-tools-path', type=Path, default=EXAMPLES / 'val_utils', help='path to store trackeval repo in')
     parser.add_argument('--split-dataset', action='store_true', help='Use the second half of the dataset')
+    parser.add_argument('--eval-classes', nargs='+', type=int, default=None, help='Classes to evaluate (e.g., 0 or 0 2). Default is all.')
 
     subparsers = parser.add_subparsers(dest='command')
 

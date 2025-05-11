@@ -78,9 +78,11 @@ def split_dataset(src_fldr: Path, percent_to_delete: float = 0.5) -> None:
 
         df.to_csv(seq_gt_path, header=None, index=None, sep=',')
 
+        # Image folder path is directly the sequence path
+        img_dir_to_process = seq_path
+
         # Remove images before the split point using pathlib
-        jpg_folder_path = seq_path / 'img1'
-        jpg_paths = list(jpg_folder_path.glob('*.jpg'))
+        jpg_paths = list(img_dir_to_process.glob('*.jpg'))
         for jpg_path in jpg_paths:
             # Extract frame number from image file name (e.g., '000300.jpg' -> 300)
             frame_number = int(jpg_path.stem)
@@ -89,13 +91,14 @@ def split_dataset(src_fldr: Path, percent_to_delete: float = 0.5) -> None:
                 jpg_path.unlink()
 
         # Rename the remaining images to have a continuous sequence starting from 1
-        remaining_jpg_paths = sorted(jpg_folder_path.glob('*.jpg'))
+        remaining_jpg_paths = sorted(list(img_dir_to_process.glob('*.jpg'))) # Ensure list for sorting
         for new_index, jpg_path in enumerate(remaining_jpg_paths, start=1):
             new_jpg_name = f"{new_index:06}.jpg"  # zero-padded to 6 digits
-            jpg_path.rename(jpg_folder_path / new_jpg_name)
+            jpg_path.rename(img_dir_to_process / new_jpg_name)
 
-        remaining_images = len(list(jpg_folder_path.glob('*.jpg')))
-        print(f'Number of images in {seq_path} after delete: {remaining_images}')
+        remaining_images = len(list(img_dir_to_process.glob('*.jpg')))
+        # Update the print statement to reflect the actual directory processed
+        print(f'Number of images in {img_dir_to_process} after delete: {remaining_images}')
         
     return dst_fldr, new_benchmark_name
 
@@ -263,17 +266,41 @@ def set_gt_fps(opt, seq_paths):
         seqs_frame_nums = json.load(f)
     
     for seq_path in seq_paths:
-        seq_name = seq_path.parent.name
+        # Determine sequence name based on whether seq_path is img1 or the sequence dir itself
+        if seq_path.name == 'img1':
+            seq_name = seq_path.parent.name
+        else:
+            seq_name = seq_path.name
+            
         frame_nums = seqs_frame_nums[seq_name]
 
-        gt_dir = seq_path.parent / 'gt'
-        gt_orig_path = gt_dir / 'gt.txt' 
-        gt_temp_path = gt_dir / 'gt_temp.txt' 
-        shutil.copy(gt_orig_path, gt_temp_path)
+        # Determine the parent directory for normal_seq.txt
+        if hasattr(opt, 'custom_gt_folder') and opt.custom_gt_folder:
+            # For custom_gt_folder, normal_seq.txt is directly under custom_gt_folder/seq_name/
+            seq_gt_parent_dir = Path(opt.custom_gt_folder) / seq_name
+        else:
+            # For standard MOT structure
+            if seq_path.name == 'img1':
+                seq_gt_parent_dir = seq_path.parent
+            else:
+                seq_gt_parent_dir = seq_path
+            
+        gt_file_to_process = seq_gt_parent_dir / 'normal_seq.txt' 
+        
+        # Ensure the parent directory for normal_seq.txt exists
+        seq_gt_parent_dir.mkdir(parents=True, exist_ok=True) 
 
-        seq = np.loadtxt(gt_temp_path, delimiter=',')
+        if not gt_file_to_process.exists():
+            LOGGER.warning(f"Ground truth file not found at {gt_file_to_process} for sequence {seq_name}. Skipping FPS adjustment for this sequence.")
+            continue
+
+        # Load, filter, and save back to normal_seq.txt
+        seq = np.loadtxt(gt_file_to_process, delimiter=',')
+        # Ensure seq is 2D even if it has one row after loading
+        if seq.ndim == 1:
+            seq = seq.reshape(1, -1)
         seq_filtered = seq[np.isin(seq[:, 0], frame_nums)]
-        np.savetxt(gt_temp_path, seq_filtered, delimiter=',')
+        np.savetxt(gt_file_to_process, seq_filtered, delimiter=',')
 
 
 def eval_setup(opt, val_tools_path):
@@ -291,44 +318,100 @@ def eval_setup(opt, val_tools_path):
       the dataset to use, the split of the dataset, whether to evaluate on an
       existing setup, and the naming for the project and evaluation results directory.
     - val_tools_path: A string or Path object pointing to the base directory where
-      the validation tools and datasets are located.
+      the validation tools and datasets are located. (Note: This is less relevant now for custom paths)
     
     Returns:
     - seq_paths: A list of Path objects pointing to the sequence directories to be evaluated.
     - save_dir: A Path object pointing to the directory where evaluation results will be saved.
     - MOT_results_folder: A Path object pointing to the directory where MOT challenge
       formatted results should be placed.
-    - gt_folder: A Path object pointing to the directory where ground truth data is located.
+    - gt_folder: A Path object pointing to the base directory where ground truth data is expected (parent of sequence dirs).
     """
 
-    # Convert val_tools_path to Path object if it's not already one
-    val_tools_path = Path(val_tools_path)
+    # --- Start: Revised logic for handling opt.source ---
+    source_path = Path(opt.source)
+    seq_paths = []
     
-    # Initial setup for paths based on benchmark and split options
-    mot_seqs_path = val_tools_path / 'data' / opt.benchmark / opt.split
-    gt_folder = mot_seqs_path  # Assuming gt_folder is the same as mot_seqs_path initially
-    
-    # Handling different benchmarks
-    if opt.benchmark == 'MOT17':
-        # Filter for FRCNN sequences in MOT17
-        seq_paths = [p / 'img1' for p in mot_seqs_path.iterdir() if p.is_dir()]
-    elif opt.benchmark == 'MOT17-mini':
-        # Adjust paths for MOT17-mini
-        base_path = ROOT / 'assets' / opt.benchmark / opt.split
-        mot_seqs_path = gt_folder = base_path
-        seq_paths = [p / 'img1' for p in mot_seqs_path.iterdir() if p.is_dir()]
+    # 检查是否指定了自定义gt文件夹
+    if hasattr(opt, 'custom_gt_folder') and opt.custom_gt_folder:
+        gt_folder = Path(opt.custom_gt_folder)
+        LOGGER.info(f"使用自定义ground truth文件夹: {gt_folder}")
     else:
-        # Default handling for other datasets
-        seq_paths = [p / 'img1' for p in mot_seqs_path.iterdir() if p.is_dir()]
+        gt_folder = None # Initialize
 
-    # Set FPS for GT files
-    set_gt_fps(opt, seq_paths)
+    if (source_path / 'img1').is_dir():
+        # 传统结构：opt.source指向含有img1子目录的序列目录
+        seq_paths = [source_path / 'img1']
+        if gt_folder is None:
+            gt_folder = source_path.parent
+        LOGGER.info(f"评估序列(有img1子目录): {source_path.name}")
+        opt.split = source_path.name
+        opt.benchmark = source_path.parent.name
+    elif source_path.is_dir() and (any(source_path.glob('*.jpg')) or any(source_path.glob('*.png'))):
+        # 新结构：图片直接在序列文件夹下
+        seq_paths = [source_path]  # 直接使用序列目录作为图片目录
+        if gt_folder is None:
+            gt_folder = source_path.parent
+        LOGGER.info(f"评估序列(图片直接在目录中): {source_path.name}")
+        opt.split = source_path.name
+        opt.benchmark = source_path.parent.name
+    elif source_path.is_dir():
+        # 多序列目录
+        if gt_folder is None:
+            gt_folder = source_path
+        LOGGER.info(f"评估多个序列: {source_path}")
+        
+        # 检查每个子目录
+        for item in source_path.iterdir():
+            if not item.is_dir():
+                continue
+                
+            if (item / 'img1').is_dir():
+                # 传统结构：序列/img1/
+                seq_paths.append(item / 'img1')
+            elif any(item.glob('*.jpg')) or any(item.glob('*.png')):
+                # 新结构：图片直接在序列文件夹下
+                seq_paths.append(item)
+        
+        if not seq_paths:
+            raise FileNotFoundError(f"未在{source_path}中找到有效的序列目录")
+    else:
+        raise FileNotFoundError(f"source路径 {source_path} 不是有效的目录")
+    
+    if gt_folder is None:
+        raise ValueError("无法确定Ground Truth文件夹(gt_folder)")
+    # --- End: Revised logic ---
+    
+    # Set FPS for GT files if GT exists and needs modification
+    # Check if GT files actually exist before trying to modify them
+    # 获取第一个序列的名称，考虑可能是img1子目录或直接是序列目录的情况
+    if seq_paths[0].name == 'img1':
+        # 传统结构：图片在img1子目录
+        first_seq_name = seq_paths[0].parent.name
+    else:
+        # 新结构：图片直接在序列目录下
+        first_seq_name = seq_paths[0].name
+        
+    gt_exists_check_path = gt_folder / first_seq_name / 'normal_seq.txt' # Check for first sequence
+    if gt_exists_check_path.is_file():
+        try:
+            set_gt_fps(opt, seq_paths) # This will now operate on normal_seq.txt directly
+        except Exception as e:
+            LOGGER.warning(f"Could not set GT FPS using {gt_exists_check_path}, proceeding with the original file. Error: {e}")
+            # If set_gt_fps fails, trackeval will use the normal_seq.txt as is.
+            # No specific copy logic needed here as normal_seq.txt is the source and target.
+
+    else:
+        LOGGER.warning(f"Ground truth file not found at expected location for first sequence: {gt_exists_check_path}. Skipping GT FPS adjustment and evaluation might fail if GT is required.")
+
 
     # Determine save directory
     save_dir = Path(opt.project) / opt.name
 
-    # Setup MOT results folder
-    MOT_results_folder = val_tools_path / 'data' / 'trackers' / 'mot_challenge' / opt.benchmark / save_dir.name / 'data'
+    # Setup MOT results folder (This might still need val_tools_path conceptually?)
+    # Let's keep the original structure for where trackeval script *outputs* its summary.
+    # The input tracker data comes from opt.exp_folder_path passed to trackeval script args.
+    MOT_results_folder = Path(val_tools_path) / 'data' / 'trackers' / 'mot_challenge' / opt.benchmark / save_dir.name / 'data'
     MOT_results_folder.mkdir(parents=True, exist_ok=True)  # Ensure directory exists
     
     return seq_paths, save_dir, MOT_results_folder, gt_folder

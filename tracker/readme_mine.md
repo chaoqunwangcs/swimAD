@@ -59,7 +59,7 @@ python -c "import torch; import torchvision; print(f'torch: {torch.__version__}\
 ```
 cd boxmot
 
-python -m tracking.track --source "G:\project\泳池data\video\clip.mp4" --yolo-model "G:\project\detection_model\yolov11L_run2_epoch250_batchsize64_imgsize640\weights\yolo11L_epoch250.pt" --tracking-method ocsort --save --save-txt --device 0
+python -m tracking.track --source "G:\project\泳池data\video\clip.mp4" --yolo-model "G:\project\detection_model\yolov11L_run2_epoch250_batchsize64_imgsize640\weights\yolo11L_epoch250.pt" --tracking-method ocsort --save  --device 0
 ```
 
 --source 指定输入源
@@ -70,7 +70,7 @@ python -m tracking.track --source "G:\project\泳池data\video\clip.mp4" --yolo-
 
 --save 保存一个带有可视化追踪结果
 
---save-txt 保存为MOT文本文件
+--device
 
 
 

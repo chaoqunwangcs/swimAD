@@ -25,7 +25,9 @@ python data_process/data_visualization.py --input_version dataset_v20250506 --la
 
 ### 数据预处理
 
-1. - [x] 转换为TXT格式(用于训练YOLO)
+！默认存放在data_transfer文件夹，如果修改，后续模型训练和推理需要对应修改
+
+1. - [x] 转换为TXT格式(用于训练和评测YOLO)
 
 ```
 python data_process/data_transfer.py --input_version dataset_v20250506 --label_format yolo
@@ -39,7 +41,7 @@ python data_process/data_transfer.py --input_version dataset_v20250506 --label_f
 ```
 
 
-3. - [x] 转换为MOT17格式（用于训练MOT）
+3. - [x] 转换为MOT17格式（用于训练和评测MOT）
 
 ```
 python data_process/data_transfer.py --input_version dataset_v20250506 --label_format mot

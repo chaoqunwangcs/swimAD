@@ -7,6 +7,7 @@ from ultralytics.utils import DEFAULT_CFG, LOCAL_RANK, LOGGER, NUM_THREADS, TQDM
 from ultralytics.data.utils import FORMATS_HELP_MSG, HELP_URL, IMG_FORMATS
 from ultralytics.utils.torch_utils import de_parallel
 from torch.utils.data import DataLoader
+from ultralytics.models.yolo.detect.val import DetectionValidator
 from utils import load_dataset_cache_file, get_hash
 
 from ultralytics.models.yolo.detect.train import DetectionTrainer
@@ -124,6 +125,10 @@ class CustomTrainer(DetectionTrainer):
         """
         gs = max(int(de_parallel(self.model).stride.max() if self.model else 0), 32)
         return build_custom_dataset(self.args, img_path, batch, self.data, mode=mode, rect=mode == "val", stride=gs)
+
+class CustomValidator(DetectionValidator):
+    def build_dataset(self, img_path, mode="val", batch=None):
+        return build_custom_dataset(self.args, img_path, batch, self.data, mode=mode, stride=self.stride)
 
 
 

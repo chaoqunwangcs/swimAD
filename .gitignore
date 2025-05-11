@@ -1,10 +1,13 @@
 # ignore the .log(run logs) and .json(transferred annotation) files
 *.log
 *.json
+*.pt
+*.pth
 
 # ignore the data_transfer and dataset folders(default save the original and transferred annotation files)
 data_transfer/
 dataset/
+data_visualtion/
 
 
 
@@ -12,9 +15,10 @@ dataset/
 ckpts/
 
 # ignore the running logs files, such as data_visualtion, logs, run_logs, and tmp file folders(default save the log results)
-data_visualtion/
+tmp/
 logs/
 boxmot/runs/
-tmp/
 yolo_train/runs/
-*.pt
+
+# ignore the pycache files
+*/__pycache__/

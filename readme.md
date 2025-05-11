@@ -34,30 +34,24 @@
        
     3. - [x] 检测模型训练（YOLO）
     
-       ```
-       \detector文件夹
-       ```
-    
-       **`train.py`**
-    
-       - **作用**: yolo训练启动文件
-    
-       **`train_config.yaml`**
-    
-       - **作用**: yolo训练配置文件
-    
-       
+        ```
+        cd yolo_train   # update to the detector when align the performance
+        python convert_data.py --version dataset_v20250506  # only once, preprocess the training structure, split the training and val set
+
+        python train.py --cfg cfgs/model_yolo11l_v20250506.yaml --name yolov11l_swimAD --ckpt ../ckpts/yolo11l.pt   # train and val the model
+        ```
     
     4. - [x] 检测模型推理和评测
     
-        '''
-        脚本
-        '''
+        ```
+        cd yolo_train
+        python val.py --data-cfg cfgs/data_swimAD_v20250506.yaml --ckpt ./runs/detect/yolov11l_swimAD/weights/best.pt   # load the trained model and data config
+        ```
     
     5. - [x] 多目标跟踪训练（）
     
         '''
-        脚本
+        暂时没训练reid_model或者end-to-end的trackor，暂时用基于无参的方法和pretrained reid_model, 后续可以训练一版。采用boxmot框架，均是detection+reid范式。
         '''
     
     6. - [x] 多目标跟踪推理和评测 （）

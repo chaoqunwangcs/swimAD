@@ -16,3 +16,5 @@ data_visualtion/
 logs/
 boxmot/runs/
 tmp/
+yolo_train/runs/
+*.pt

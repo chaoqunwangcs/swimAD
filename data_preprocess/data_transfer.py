@@ -530,6 +530,87 @@ def transfer_to_mot(folders, save_path):
 
     logging.info(f"Finished processeing {len(folders)} videos.")
 
+def size_is_valid(size):
+    img_height, img_width = size[0], size[1]
+    if img_height is None or img_width is None or not isinstance(img_height, (int, float)) or not isinstance(img_width, (int, float)) or img_height <= 0 or img_width <= 0:
+        logging.warning(f"跳过 {filename}: 无效或缺失的 'imageHeight' 或 'imageWidth'。")
+        return False
+    return True
+
+def transfer_to_yolo_video(folder, save_path):
+    # pdb.set_trace()
+    json_files = os.listdir(folder)
+    json_files = sorted(list(filter(lambda x: x.endswith('.json'),json_files)))
+    for json_file in tqdm(json_files, desc=f"Processing {folder}: "):
+        json_file_path = os.path.join(folder, json_file)
+        save_txt_path = os.path.join(save_path, json_file.replace('.json', '.txt'))
+
+        # parse json file
+        with open(json_file_path, 'r', encoding='utf-8') as f:
+            # pdb.set_trace()
+            data = json.load(f)
+
+        img_height = data.get('imageHeight')
+        img_width = data.get('imageWidth')
+        shapes = data.get('shapes', [])
+
+        assert size_is_valid([img_height, img_width])
+
+        annotations = []
+
+        for shape in shapes:
+            label_str = shape.get('label')
+            points = shape.get('points')
+            shape_type = shape.get('shape_type')
+
+            if shape_type != 'rectangle' or label_str is None or points is None or len(points) != 2:
+                logging.debug(f"在 {filename} 中跳过无效或非矩形标注: {shape}")
+                continue
+            
+            parsed_labels = parse_custom_label(label_str)
+            if parsed_labels is None: continue
+
+            class_id = parsed_labels[3]
+
+            try:
+                x1, y1 = map(float, points[0])
+                x2, y2 = map(float, points[1])
+            except (ValueError, TypeError):
+                logging.warning(f"在 {filename} 中跳过包含无效坐标点的标注: {points}")
+                continue
+
+
+            box_width = abs(x1 - x2)
+            box_height = abs(y1 - y2)
+            center_x = (x1 + x2) / 2
+            center_y = (y1 + y2) / 2
+
+            norm_center_x = round(center_x / img_width, 6)
+            norm_center_y = round(center_y / img_height, 6)
+            norm_width = round(box_width / img_width, 6)
+            norm_height = round(box_height / img_height, 6)
+
+
+            if not (0 <= norm_center_x <= 1 and 0 <= norm_center_y <= 1 and 0 <= norm_width <= 1 and 0 <= norm_height <= 1):
+                logging.warning(f"在 {filename} 中跳过归一化后值越界的标注: "
+                                f"[{norm_center_x}, {norm_center_y}, {norm_width}, {norm_height}]")
+                continue
+
+            yolo_line = f"{class_id} {norm_center_x} {norm_center_y} {norm_width} {norm_height}"
+
+            if parsed_labels[1] == 1 and parsed_labels[2] == 1:
+                annotations.append(yolo_line)
+            
+            with open(save_txt_path, 'w', encoding='utf-8') as f:
+                f.write("\n".join(annotations) + "\n")
+    
+
+def transfer_to_yolo(folders, save_path):
+    for folder in folders:
+        _,data_version,clip,view = folder.split('/')
+        save_view_path = os.path.join(save_path, data_version, clip, view); ensure_dir(save_view_path)
+        transfer_to_yolo_video(folder, save_view_path)
+    
 
 def main(args):
 
@@ -550,7 +631,8 @@ def main(args):
         transfer_to_coco(all_view_folders, save_path)
     
     elif args.label_format == 'yolo':   # for YOLO model
-        raise NotImplementedError(f"This function not support {args.input_version} format! comming soon")
+        save_path = os.path.join(args.output_dir, 'yolo'); ensure_dir(save_path)
+        transfer_to_yolo(all_view_folders, save_path)
     
     elif args.label_format == 'mot': # for MOT task
         save_path = os.path.join(args.output_dir, "mot",f"{args.input_version}")
@@ -563,50 +645,3 @@ if __name__ == '__main__':
 
     args = parse_arguments()
     main(args)
-
-
-
-    # if not os.path.isdir(LABELME_JSON_DIR):
-    #     logging.error(f"LabelMe JSON directory not found: {LABELME_JSON_DIR}")
-    #     exit(1) # Use non-zero exit code for errors
-    # if not SAVED_COCO_PATH:
-    #      logging.error("Output COCO path (SAVED_COCO_PATH) is not specified.")
-    #      exit(1)
-    # if not CATEGORY_NAME_PREFIX:
-    #     logging.warning("CATEGORY_NAME_PREFIX is empty. Category names will just be the label_4 numbers.")
-
-
-    # # --- Create Output Directory ---
-    # try:
-    #     # Check if path exists and is a directory, create if not
-    #     if not os.path.exists(SAVED_COCO_PATH):
-    #          os.makedirs(SAVED_COCO_PATH, exist_ok=True)
-    #          logging.info(f"Created output directory: {SAVED_COCO_PATH}")
-    #     elif not os.path.isdir(SAVED_COCO_PATH):
-    #          logging.error(f"Output path {SAVED_COCO_PATH} exists but is not a directory.")
-    #          exit(1)
-    #     else:
-    #          logging.info(f"Output directory already exists: {SAVED_COCO_PATH}")
-
-    # except Exception as e:
-    #     logging.error(f"Could not create or access output directory {SAVED_COCO_PATH}: {e}")
-    #     exit(1)
-
-
-    # # --- Find LabelMe JSON files ---
-    # json_pattern = os.path.join(LABELME_JSON_DIR, "*.json")
-    # json_list_path = glob.glob(json_pattern) # Get all JSON file paths
-    # if not json_list_path:
-    #     logging.error(f"No JSON files found in directory: {LABELME_JSON_DIR} with pattern '*.json'")
-    #     exit(1)
-    # logging.info(f"Found {len(json_list_path)} JSON files in {LABELME_JSON_DIR}")
-
-    # # --- Initialize Converter ---
-    # converter = Labelme2Coco()
-
-    # # --- Process All Data ---
-    # logging.info("Starting LabelMe to COCO conversion process...")
-    # coco_instance = converter.generate_coco_annotation(json_list_path) # Generate annotations
-
-
-

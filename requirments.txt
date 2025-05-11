@@ -3,3 +3,4 @@ opencv-python==4.7.0.72
 labelme==5.1.1
 tqdm
 git+https://github.com/mikel-brostrom/ultralytics.git
+tensorboard

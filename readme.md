@@ -61,7 +61,7 @@
         '''
     
     6. - [x] 多目标跟踪推理和评测 （）
-        
+       
         1. -[x] 推理
             1. -[x] 无参跟踪器(ocsort/bytetrack/)，利用--tracking-method指定跟踪器即可
 
@@ -81,12 +81,15 @@
         ```
         2. -[ ] 评测
         ```
-        coming soon
+        测试示例:
+        #(windows)
+        #正式评估时替换--source地址以及对应的--custom-gt-folder
+        python -m tracking.val  --source "..\swimAD\test\下午"  --custom-gt-folder "..\swimAD\annotation_mot_gt\dataset_v20250506\下午" --yolo-model ..\yolov11L_run2_epoch250_batchsize64_imgsize640\weights\yolo11L_epoch250.pt  --tracking-method ocsort --device 0 
         ```
 
 
     7. -[x] 单视角溺水检测（基于[规则](rules.md)）
-
+    
         ```
         python -m tracking.swimAD --source `video_path`[webcam(0)/.mp4/.jpg/path/url] --yolo-model `yolo_ckpt_path` --tracking-method ocsort --save-video --device 0
         ```
@@ -94,7 +97,7 @@
         ```
         python -m tracking.swimAD --source ../dataset/dataset_v20250506/noon/1/ --yolo-model ../ckpts/yolo11L_epoch250.pt --tracking-method ocsort --save-video --show-trajectories --device 0
         ```
-
+    
     #### TODO List
     1. - [ ] 代码库修改，代码格式对齐一下
     2. - [ ] 用pretrain VL model处理第一批数据，提升检测准确率

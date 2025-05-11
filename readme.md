@@ -61,7 +61,7 @@
         '''
     
     6. - [x] 多目标跟踪推理和评测 （）
-        
+       
         1. -[x] 推理
             1. -[x] 无参跟踪器(ocsort/bytetrack/)，利用--tracking-method指定跟踪器即可
 
@@ -80,13 +80,23 @@
         python -m tracking.track --source ../dataset/dataset_v20250506/noon/1/ --yolo-model ../ckpts/yolo11L_epoch250.pt --tracking-method deepocsort --reid-model osnet_x0_25_market1501.pt --show-trajectories --device 0
         ```
         2. -[ ] 评测
+       
+           文件格式要求:
+       
+           - --source和--custom-gt-folder下都为序列,各序列名字对应相同.
+           - 在--source的序列中放图片;--custom-gt-folder的对应序列中放mot标注文件和seqinfo.ini文件.(seqinfo.ini文件已写好于./swimAD/assets,拷贝以使用)
+           - mot标注文件要求命名为normal_seq.txt(由labelme_to_mot.py生成的mot文件)
+           - <a href="https://drive.google.com/file/d/110us0NPPlGSJuowNxJ_tgrU8eXLkPn4E/view?usp=drive_link" download>dataset_v20250506的annotation_mot_gt文件下载</a>
+       
+            例如：
         ```
-        coming soon
+        #(windows)
+        python -m tracking.val  --source "..images\dataset_v20250506\下午"  --custom-gt-folder "..\annotation_mot_gt\dataset_v20250506\下午" --yolo-model ..\yolov11L_run2_epoch250_batchsize64_imgsize640\weights\yolo11L_epoch250.pt  --tracking-method ocsort --device 0 
         ```
 
 
     7. -[x] 单视角溺水检测（基于[规则](rules.md)）
-
+    
         ```
         python -m tracking.swimAD --source `video_path`[webcam(0)/.mp4/.jpg/path/url] --yolo-model `yolo_ckpt_path` --tracking-method ocsort --save-video --device 0
         ```
@@ -94,7 +104,7 @@
         ```
         python -m tracking.swimAD --source ../dataset/dataset_v20250506/noon/1/ --yolo-model ../ckpts/yolo11L_epoch250.pt --tracking-method ocsort --save-video --show-trajectories --device 0
         ```
-
+    
     #### TODO List
     1. - [ ] 代码库修改，代码格式对齐一下
     2. - [ ] 用pretrain VL model处理第一批数据，提升检测准确率

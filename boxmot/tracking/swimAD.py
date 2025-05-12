@@ -69,7 +69,7 @@ def run(args):
         else 'yolov8n.pt',
     )
     
-    # pdb.set_trace()
+
     results = yolo.track(
         source=args.source,
         conf=args.conf,
@@ -117,7 +117,7 @@ def run(args):
     # store custom args in predictor
     yolo.predictor.custom_args = args
 
-    if args.save_video is True:
+    if args.save_video is not None:
         all_imgs = []
 
     for r in results:
@@ -131,7 +131,7 @@ def run(args):
             
             # print("Detect AD swimmer")
 
-        if args.save_video is True:
+        if args.save_video is not None:
             all_imgs.append(img)
 
         if args.show is True:
@@ -141,9 +141,9 @@ def run(args):
                 break
 
     # pdb.set_trace()
-    if args.save_video is True:
+    if args.save_video is not None:
         os.makedirs(args.project, exist_ok=True)
-        video_path = os.path.join(args.project, 'output_video_AD.mp4')
+        video_path = os.path.join(args.project, args.save_video)
         frame_size = all_imgs[0].shape[1], all_imgs[0].shape[0]
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         fps = 2
@@ -151,6 +151,7 @@ def run(args):
         for img in all_imgs:
             out.write(img)
         out.release()
+        print(f"Saving video in {video_path}.")
 
 def parse_opt():
     
@@ -175,8 +176,8 @@ def parse_opt():
                         help='display tracking video results')
     parser.add_argument('--save', action='store_true',
                         help='save video tracking results')
-    parser.add_argument('--save-video', action='store_true',
-                        help='save video tracking results in .mp4 format')
+    parser.add_argument('--save-video', type=str, default=None,
+                        help='save video tracking results path in .mp4 format')
 
     # class 0 is person, 1 is bycicle, 2 is car... 79 is oven
     parser.add_argument('--classes', nargs='+', type=int,

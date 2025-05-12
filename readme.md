@@ -92,11 +92,15 @@
     7. -[x] 单视角溺水检测（基于[规则](rules.md)）
     
         ```
-        python -m tracking.swimAD --source `video_path`[webcam(0)/.mp4/.jpg/path/url] --yolo-model `yolo_ckpt_path` --tracking-method ocsort --save-video --device 0
+        python -m tracking.swimAD --source `video_path`[webcam(0)/.mp4/.jpg/path/url] --yolo-model `yolo_ckpt_path` --tracking-method ocsort --save-video `save_video_path` --device 0
         ```
         例如：
         ```
-        python -m tracking.swimAD --source ../dataset/dataset_v20250506/noon/1/ --yolo-model ../ckpts/yolo11L_epoch250.pt --tracking-method ocsort --save-video --show-trajectories --device 0
+        python -m tracking.swimAD --source ../dataset/dataset_v20250506/noon/1/ --yolo-model ../ckpts/yolo11L_epoch250.pt --tracking-method ocsort --save-video swimAD_example.mp4 --show-trajectories --device 0
+        ```
+        针对video输入，设置vid-stride为采样频率，此项目可以暂时设置为10
+        ```
+        python -m tracking.swimAD --source example.mp4 --yolo-model ../ckpts/yolo11L_epoch250.pt --tracking-method ocsort --save-video  swimAD_example.mp4 --vid-stride 10 --show-trajectories --device 0
         ```
     
     #### TODO List

@@ -431,11 +431,6 @@ class BaseTracker(BaseRules):
                 
         return img
 
-    def calc_dist(self, box1, box2):
-        center1 = np.array([(box1[0] + box1[2]) / 2, (box1[1] + box1[3]) / 2])
-        center2 = np.array([(box2[0] + box2[2]) / 2, (box2[1] + box2[3]) / 2])
-        distance = np.linalg.norm(center1 - center2)
-        return distance
 
     def detect_AD(self) -> list[np.ndarray]:
         """

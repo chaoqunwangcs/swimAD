@@ -438,6 +438,8 @@ class BaseTracker(BaseRules):
         """
 
         AD_list = []
+        info_list = []
+        # pdb.set_trace()
         for a in self.active_tracks:
             match_rules = []
             if a.history_observations:
@@ -445,7 +447,9 @@ class BaseTracker(BaseRules):
                     rule_name = f"rule{i}"
                     if hasattr(self, rule_name):
                         func = getattr(self, rule_name)
-                        if func(a.history_observations):
+                        flag, info = func(a.history_observations, a.id)
+                        info_list.append({f"rule{i}":info})
+                        if flag:
                             match_rules.append(rule_name)
                 
                 if len(match_rules) > 0:
@@ -454,7 +458,7 @@ class BaseTracker(BaseRules):
 
         # if len(AD_list) > 0:
         #     pdb.set_trace()  
-        return AD_list
+        return AD_list, info_list
 
 
     def plot_AD_results(self, img: np.ndarray, show_trajectories: bool, AD_list: list, thickness: int = 4, fontscale: float = 0.5) -> np.ndarray:

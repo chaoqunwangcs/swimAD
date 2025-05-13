@@ -187,7 +187,9 @@ def process_folder(source_path, save_path):
     for img in tqdm(imgs, desc=f"{source_path}: "):
         img_path = os.path.join(source_path, img)
         json_path = os.path.join(source_path, os.path.splitext(img)[0]+'.json')
-        assert os.path.exists(img_path) and os.path.exists(json_path), logging.warning(f"file: {img_path} or {json_path} not exist")
+        if not (os.path.exists(img_path) and os.path.exists(json_path)), 
+            logging.warning(f"file: {img_path} or {json_path} not exist")
+            continue
         save_img_path = os.path.join(save_path, img)
 
         is_success = visualize(img_path, json_path, save_img_path)

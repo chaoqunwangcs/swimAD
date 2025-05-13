@@ -96,8 +96,9 @@
         ```
         例如：
         ```
-        python -m tracking.swimAD --source ../dataset/dataset_v20250506/noon/1/ --yolo-model ../ckpts/yolo11L_epoch250.pt --tracking-method ocsort --save-video swimAD_example.mp4 --show-trajectories --device 0
+        python -m tracking.swimAD --source ../dataset/dataset_v20250506/noon/1/ --yolo-model ../ckpts/yolo11L_epoch250.pt --tracking-method ocsort --save-video swimAD_example.mp4 --show-trajectories --device 0 --log-level DEBUG
         ```
+        此处，利用DEBUG LOG记录每一个ID物体的信息，默认存放在logs/time.log中，包含图像路径，物体ID，最远/最近移动距离，10秒内运动距离，类别列表，位置列表等信息
         针对video输入，设置vid-stride为采样频率，此项目可以暂时设置为10
         ```
         python -m tracking.swimAD --source example.mp4 --yolo-model ../ckpts/yolo11L_epoch250.pt --tracking-method ocsort --save-video  swimAD_example.mp4 --vid-stride 10 --show-trajectories --device 0

@@ -6,12 +6,15 @@ import cv2
 import numpy as np
 from functools import partial
 from pathlib import Path
+from datetime import datetime
+now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 import torch
 
 from boxmot import TRACKERS
 from boxmot.tracker_zoo import create_tracker
 from boxmot.utils import ROOT, WEIGHTS, TRACKER_CONFIGS
+
 from boxmot.utils.checks import RequirementsChecker
 from tracking.detectors import (get_yolo_inferer, default_imgsz,
                                 is_ultralytics_model, is_yolox_model)
@@ -23,6 +26,8 @@ from ultralytics import YOLO
 from ultralytics.utils.plotting import Annotator, colors
 from ultralytics.data.utils import VID_FORMATS
 from ultralytics.utils.plotting import save_one_box
+
+from boxmot.utils import logger as LOGGER
 
 import pdb
 
@@ -61,6 +66,8 @@ def on_predict_start(predictor, persist=False):
 
 @torch.no_grad()
 def run(args):
+
+    LOGGER.add(args.log_path, format="{time} - {level} - {message}", level=args.log_level, rotation="100 MB")
 
     if args.imgsz is None:
         args.imgsz = default_imgsz(args.yolo_model)
@@ -121,15 +128,12 @@ def run(args):
         all_imgs = []
 
     for r in results:
+        # pdb.set_trace()
         img = yolo.predictor.trackers[0].plot_results(r.orig_img, args.show_trajectories)
-        AD_list = yolo.predictor.trackers[0].detect_AD()
+        AD_list, info_list = yolo.predictor.trackers[0].detect_AD()
         if len(AD_list) > 0:
-            # pdb.set_trace()
             for AD in AD_list:
-                # img = yolo.predictor.trackers[0].plot_results(r.orig_img, args.show_trajectories)
                 img = yolo.predictor.trackers[0].plot_AD_results(r.orig_img, args.show_trajectories, AD_list)
-            
-            # print("Detect AD swimmer")
 
         if args.save_video is not None:
             all_imgs.append(img)
@@ -139,6 +143,18 @@ def run(args):
             key = cv2.waitKey(1) & 0xFF
             if key == ord(' ') or key == ord('q'):
                 break
+
+        # update the info into log file
+        if len(info_list) > 0:
+            LOGGER.debug(f"Image path: {r.path}")
+            for object_info in info_list:
+                for rule_name, rule_info in object_info.items():
+                    # pdb.set_trace()
+                    try:
+                        LOGGER.debug(f"\t {rule_name}: ID: {rule_info['id']:2d}, max_dist: {rule_info['max_dist']:.2f}, min_dist: {rule_info['min_dist']:.2f}, move_dist: {rule_info['move_dist']:.2f}, avg_scale: {rule_info['avg_scale']:.2f}")
+                        LOGGER.debug(f"\t cls_list: {rule_info['cls_list']}, scale_list: {rule_info['scale_list']}")
+                    except:
+                        pdb.set_trace()
 
     # pdb.set_trace()
     if args.save_video is not None:
@@ -178,6 +194,11 @@ def parse_opt():
                         help='save video tracking results')
     parser.add_argument('--save-video', type=str, default=None,
                         help='save video tracking results path in .mp4 format')
+
+    parser.add_argument('--log-path', type=str, default=f"logs/{now}.log",
+                        help='save log file path')
+    parser.add_argument('--log-level', type=str, default="INFO",
+                        help='the log level')
 
     # class 0 is person, 1 is bycicle, 2 is car... 79 is oven
     parser.add_argument('--classes', nargs='+', type=int,

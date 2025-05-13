@@ -32,6 +32,24 @@ from boxmot.utils import logger as LOGGER
 import pdb
 
 
+def plot_id(img, frame_id):
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 2
+    font_color = (255, 255, 255)  # 白色
+    font_thickness = 2
+
+    height, width = img.shape[:2]
+
+    # 计算文本的位置（右上角）
+    line = f"FrameID: {frame_id:04d}"
+    text_size = cv2.getTextSize(line, font, font_scale, font_thickness)[0]
+    text_x = width - text_size[0] - 10  # 距离右侧边缘10像素
+    text_y = text_size[1] + 10  # 距离顶部边缘10像素
+
+    # 在图像上绘制文本
+    cv2.putText(img, line, (text_x, text_y), font, font_scale, font_color, font_thickness)
+
+    return img
 
 def on_predict_start(predictor, persist=False):
     """
@@ -130,6 +148,7 @@ def run(args):
     for frame_id, r in enumerate(results):
         # pdb.set_trace()
         img = yolo.predictor.trackers[0].plot_results(r.orig_img, args.show_trajectories)
+        img = plot_id(img, frame_id)
         AD_list, info_list = yolo.predictor.trackers[0].detect_AD()
         if len(AD_list) > 0:
             for AD in AD_list:

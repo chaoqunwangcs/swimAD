@@ -54,6 +54,12 @@ class BaseTracker(BaseRules):
         self._first_frame_processed = False  # Flag to track if the first frame has been processed
         self._first_dets_processed = False
         
+
+        self.cls_map = {
+            '0': 'ashore',
+            '1': 'above',
+            '2': 'under'
+        }
         # Initialize per-class active tracks
         if self.per_class:
             self.per_class_active_tracks = {}
@@ -240,6 +246,122 @@ class BaseTracker(BaseRules):
         
         return bgr
 
+
+    def plot_trackers_trajectories(self, img: np.ndarray, box: tuple, conf: float, cls: int, id: int, thickness: int = 2, fontscale: float = 0.5) -> np.ndarray:
+        """
+        Draws a bounding box with ID, confidence, and class information on an image.
+
+        Parameters:
+        - img (np.ndarray): The image array to draw on.
+        - box (tuple): The bounding box coordinates as (x1, y1, x2, y2).
+        - conf (float): Confidence score of the detection.
+        - cls (int): Class ID of the detection.
+        - id (int): Unique identifier for the detection.
+        - thickness (int): The thickness of the bounding box.
+        - fontscale (float): The font scale for the text.
+
+        Returns:
+        - np.ndarray: The image array with the bounding box drawn on it.
+        """
+
+        if self.is_obb:
+            
+            angle = box[4] * 180.0 / np.pi  # Convert radians to degrees
+            box_poly = ((box[0], box[1]), (box[2], box[3]), angle)
+            # print((width, height))
+            rotrec = cv.boxPoints(box_poly)
+            box_poly = np.int_(rotrec)  # Convert to integer
+
+            # Draw the rectangle on the image
+            img = cv.polylines(img, [box_poly], isClosed=True, color=self.id_to_color(id), thickness=thickness)
+
+            
+            img = cv.putText(
+                img,
+                f'{int(id)}, c: {int(cls)}',
+                (int(box[0]), int(box[1]) - 10),
+                cv.FONT_HERSHEY_SIMPLEX,
+                fontscale,
+                self.id_to_color(id),
+                thickness
+            )
+        else:
+            img = cv.rectangle(
+                img,
+                (int(box[0]), int(box[1])),
+                (int(box[2]), int(box[3])),
+                self.id_to_color(id),  
+                thickness
+            )
+            img = cv.putText(
+                img,
+                f'id: {int(id)}, conf: {conf:.2f}, c: {int(cls)}',
+                (int(box[0]), int(box[1]) - 10),
+                cv.FONT_HERSHEY_SIMPLEX,
+                fontscale,
+                self.id_to_color(id),
+                thickness
+            )
+        return img
+
+
+    def plot_plain_box_on_img(self, img: np.ndarray, box: tuple, conf: float, cls: int, id: int, thickness: int = 2, fontscale: float = 0.5) -> np.ndarray:
+        """
+        Draws a bounding box with ID, confidence, and class information on an image.
+
+        Parameters:
+        - img (np.ndarray): The image array to draw on.
+        - box (tuple): The bounding box coordinates as (x1, y1, x2, y2).
+        - conf (float): Confidence score of the detection.
+        - cls (int): Class ID of the detection.
+        - id (int): Unique identifier for the detection.
+        - thickness (int): The thickness of the bounding box.
+        - fontscale (float): The font scale for the text.
+
+        Returns:
+        - np.ndarray: The image array with the bounding box drawn on it.
+        """
+        
+        if self.is_obb:
+            
+            angle = box[4] * 180.0 / np.pi  # Convert radians to degrees
+            box_poly = ((box[0], box[1]), (box[2], box[3]), angle)
+            # print((width, height))
+            rotrec = cv.boxPoints(box_poly)
+            box_poly = np.int_(rotrec)  # Convert to integer
+
+            # Draw the rectangle on the image
+            img = cv.polylines(img, [box_poly], isClosed=True, color=self.id_to_color(id), thickness=thickness)
+
+            
+            img = cv.putText(
+                img,
+                f'{int(id)}, {self.cls_map[str(cls)]}',
+                (int(box[0]), int(box[1]) - 10),
+                cv.FONT_HERSHEY_SIMPLEX,
+                fontscale,
+                self.id_to_color(id),
+                thickness
+            )
+        else:
+            img = cv.rectangle(
+                img,
+                (int(box[0]), int(box[1])),
+                (int(box[2]), int(box[3])),
+                self.id_to_color(id),  
+                thickness
+            )
+            img = cv.putText(
+                img,
+                f'{int(id)}, {self.cls_map[str(int(cls))]}',
+                (int(box[0]), int(box[1]) - 10),
+                cv.FONT_HERSHEY_SIMPLEX,
+                fontscale,
+                self.id_to_color(id),
+                thickness
+            )
+        return img
+
     def plot_box_on_img(self, img: np.ndarray, box: tuple, conf: float, cls: int, id: int, thickness: int = 2, fontscale: float = 0.5) -> np.ndarray:
         """
         Draws a bounding box with ID, confidence, and class information on an image.
@@ -313,6 +435,7 @@ class BaseTracker(BaseRules):
         Returns:
         - np.ndarray: The image array with the bounding box drawn on it.
         """
+        # pdb.set_trace()
         if self.is_obb:
             
             angle = box[4] * 180.0 / np.pi  # Convert radians to degrees
@@ -324,10 +447,9 @@ class BaseTracker(BaseRules):
             # Draw the rectangle on the image
             img = cv.polylines(img, [box_poly], isClosed=True, color=(0,0,255), thickness=thickness)
 
-            
             img = cv.putText(
                 img,
-                f'id: {int(id)}, conf: {conf:.2f}, c: {int(cls)}, r: {rule}',
+                f'{int(id)}, {self.cls_map[str(cls)]}, True',
                 (int(box[0]), int(box[1]) - 10),
                 cv.FONT_HERSHEY_SIMPLEX,
                 fontscale,
@@ -344,7 +466,7 @@ class BaseTracker(BaseRules):
             )
             img = cv.putText(
                 img,
-                f'id: {int(id)}, conf: {conf:.2f}, c: {int(cls)}, r: {rule}',   # breaking rules
+                f'{int(id)}, {self.cls_map[str(int(cls))]}, True',
                 (int(box[0]), int(box[1]) - 10),
                 cv.FONT_HERSHEY_SIMPLEX,
                 fontscale,
@@ -389,6 +511,50 @@ class BaseTracker(BaseRules):
                     self.id_to_color(id),   # red for AD objects
                     thickness=trajectory_thickness
                 )
+        return img
+
+
+
+
+    def plot_plain_results(self, img: np.ndarray, show_trajectories: bool, thickness: int = 2, fontscale: float = 0.5) -> np.ndarray:
+        """
+        Visualizes the trajectories of all active tracks on the image. For each track,
+        it draws the latest bounding box and the path of movement if the history of
+        observations is longer than two. This helps in understanding the movement patterns
+        of each tracked object.
+
+        Parameters:
+        - img (np.ndarray): The image array on which to draw the trajectories and bounding boxes.
+        - show_trajectories (bool): Whether to show the trajectories.
+        - thickness (int): The thickness of the bounding box.
+        - fontscale (float): The font scale for the text.
+
+        Returns:
+        - np.ndarray: The image array with trajectories and bounding boxes of all active tracks.
+        """
+
+        # if values in dict
+        if self.per_class_active_tracks is not None:
+            for k in self.per_class_active_tracks.keys():
+                active_tracks = self.per_class_active_tracks[k]
+                for a in active_tracks:
+                    if int(a.cls) == 0: continue    # ignore the ashore person
+                    if a.history_observations:
+                        if len(a.history_observations) > 2:
+                            box = a.history_observations[-1]
+                            img = self.plot_plain_box_on_img(img, box, a.conf, a.cls, a.id, thickness, fontscale)
+                            if show_trajectories:
+                                img = self.plot_trackers_trajectories(img, a.history_observations, a.id)
+        else:
+            for a in self.active_tracks:
+                if int(a.cls) == 0: continue    # ignore the ashore person
+                if a.history_observations:
+                    if len(a.history_observations) > 2:
+                        box = a.history_observations[-1]
+                        img = self.plot_plain_box_on_img(img, box, a.conf, a.cls, a.id, thickness, fontscale)
+                        if show_trajectories:
+                            img = self.plot_trackers_trajectories(img, a.history_observations, a.id)
+                
         return img
 
 

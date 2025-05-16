@@ -37,6 +37,7 @@ class BaseRules(ABC):
         INFO['avg_scale'] = -1
         INFO['cls_list'] = []
         INFO['scale_list'] = []
+        INFO['is_AD'] = False
 
         if len(history_observations) > window_size:
             history_observations_list = list(islice(history_observations, len(history_observations) - window_size, len(history_observations)))
@@ -59,6 +60,7 @@ class BaseRules(ABC):
             INFO['avg_scale'] = avg_box_scale
             INFO['cls_list'] = np.around(np.array(clses), decimals=0).tolist()
             INFO['scale_list'] = np.around(box_scales, decimals=2).tolist()
+            INFO['is_AD'] = (DIST_FLAG and CLS_FLAG)
 
             
             return (DIST_FLAG and CLS_FLAG), INFO

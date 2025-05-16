@@ -147,8 +147,11 @@ def run(args):
 
     for frame_id, r in enumerate(results):
         # pdb.set_trace()
-        img = yolo.predictor.trackers[0].plot_results(r.orig_img, args.show_trajectories)
-        img = plot_id(img, frame_id)
+        # img = yolo.predictor.trackers[0].plot_results(r.orig_img, args.show_trajectories)
+        img = yolo.predictor.trackers[0].plot_plain_results(r.orig_img, args.show_trajectories, fontscale=1)
+        img = plot_id(img, frame_id+1)
+        # pdb.set_trace()
+        cv2.imwrite('aa.jpg', img)
         AD_list, info_list = yolo.predictor.trackers[0].detect_AD()
         if len(AD_list) > 0:
             for AD in AD_list:
@@ -170,7 +173,7 @@ def run(args):
                 for rule_name, rule_info in object_info.items():
                     # pdb.set_trace()
                     try:
-                        LOGGER.debug(f"\t Frame ID: {frame_id} {rule_name}: ID: {rule_info['id']:2d}, max_dist: {rule_info['max_dist']:.2f}, min_dist: {rule_info['min_dist']:.2f}, move_dist: {rule_info['move_dist']:.2f}, avg_scale: {rule_info['avg_scale']:.2f}")
+                        LOGGER.debug(f"\t Frame ID: {frame_id},  Object ID: {rule_info['id']:2d}, is_AD: {bool(rule_info['is_AD'])}, max_dist: {rule_info['max_dist']:.2f}, min_dist: {rule_info['min_dist']:.2f}, move_dist: {rule_info['move_dist']:.2f}, avg_scale: {rule_info['avg_scale']:.2f}")
                         LOGGER.debug(f"\t cls_list: {rule_info['cls_list']}, scale_list: {rule_info['scale_list']}")
                     except:
                         pdb.set_trace()

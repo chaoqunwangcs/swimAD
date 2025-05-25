@@ -1,4 +1,17 @@
+### coco_eval.py
+
+**example**
+
+```
+python data_preprocess\coco_eval.py    --gt_file "..\instances_val_gt.json"     --pred_file "..\pred.json"  --results_dir ./evaluation_output_folder
+```
+
+
+
+
+
 ### 文件夹格式
+
 ```plaintext
 dataset/
 |---dataset_v20250506/ 不同的标注版本 v后面是标注日期

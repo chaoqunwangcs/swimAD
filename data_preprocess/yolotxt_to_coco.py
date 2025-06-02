@@ -6,11 +6,10 @@ from tqdm import tqdm # 可选，用于显示进度条
 import glob         # 用于查找标签文件
 
 # --- 配置常量 (宏定义) ---
-# !! 请在这里修改为你的实际路径 !!
-# 注意：在 Windows 上，路径字符串前最好加上 r (原始字符串) 或使用双反斜杠 \\
-IMG_DIRECTORY = r"G:\project\20250423游泳池数据最新标签修改返回__gt_display\COCO_ROOT\val"  # <--- 修改: 包含图片的目录路径
-LABEL_DIRECTORY = r"G:\project\20250423游泳池数据最新标签修改返回__gt_display\yolo_label\val" # <--- 包含 YOLO .txt 标签文件的目录路径
-OUTPUT_JSON = r"G:\project\20250423游泳池数据最新标签修改返回__gt_display\yolo_label\instances_val.json" # <--- 输出 COCO JSON 文件的保存路径
+
+IMG_DIRECTORY = r"G:\project\20250423游泳池数据最新标签修改返回__processed\yolo_label\yolo_data\images\val"  # <--- 修改: 包含图片的目录路径
+LABEL_DIRECTORY = r"G:\project\detection_model\result_pred_v11L_250_with_score\labels" # <--- 包含 YOLO .txt 标签文件的目录路径
+OUTPUT_JSON = r"G:\project\detection_model\result_pred_v11L_250_with_score\cocolabel\pred.json" # <--- 输出 COCO JSON 文件的保存路径
 # --- CLASS_NAMES_PATH 不再需要 ---
 # --------------------------
 
@@ -176,6 +175,11 @@ def yolo_to_coco(img_dir, label_dir, output_json_path):
 
                 for line in lines:
                     parts = line.strip().split()
+                    # 支持带置信度的6字段行，只取前5个字段用于bbox等，score单独提取
+                    score = None
+                    if len(parts) == 6:
+                        score = float(parts[5])
+                        parts = parts[:5]
                     # 确保每行有 5 个部分: class_id, x_center, y_center, width, height
                     if len(parts) == 5:
                         try:
@@ -205,7 +209,7 @@ def yolo_to_coco(img_dir, label_dir, output_json_path):
                             coco_cat_id = yolo_class_id_to_coco_id[yolo_class_id]
 
                             # --- 添加标注信息到 COCO 输出 ---
-                            coco_output["annotations"].append({
+                            ann = {
                                 "id": annotation_id_counter,       # 唯一的标注 ID
                                 "image_id": image_id_counter,      # 对应的图片 ID
                                 "category_id": coco_cat_id,        # 对应的类别 ID
@@ -213,7 +217,10 @@ def yolo_to_coco(img_dir, label_dir, output_json_path):
                                 "area": bbox_width * bbox_height,  # 边界框面积
                                 "bbox": [round(x_min, 2), round(y_min, 2), round(bbox_width, 2), round(bbox_height, 2)], # COCO 格式的边界框
                                 "iscrowd": 0                       # 0 表示非拥挤目标
-                            })
+                            }
+                            if score is not None:
+                                ann["score"] = score
+                            coco_output["annotations"].append(ann)
                             annotation_id_counter += 1 # 增加标注 ID 计数器
                         except ValueError:
                              print(f"\n警告：标签文件 {label_filename} 中行 '{line.strip()}' 包含无效数字格式。跳过此行。")

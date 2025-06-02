@@ -120,6 +120,18 @@
 
 2. - [ ] 多视角联合跟踪
 
+   **指令example**
+
+   ```
+   python -m tracking.track_mul --source1 "G:\project\images\test6.2_multiview\1" --source4 "G:\project\images\test6.2_multiview\4" --yolo-model "G:\project\detection_model\yolov11L_run2_epoch250_batchsize64_imgsize640\weights\yolo11L_epoch250.pt" --tracking-method ocsort   --device 0  --show-trajectories  --save
+   ```
+
+   (重映射的逻辑还没写,多视角相关文件在swimAD\boxmot\multiview_tool)
+
+
+
+
+
 
 ### 后处理溺水判定（）
 1. -[ ] 后处理规则判定

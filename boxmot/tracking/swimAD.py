@@ -7,7 +7,7 @@ import numpy as np
 from functools import partial
 from pathlib import Path
 from datetime import datetime
-now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+now = datetime.now().strftime("%Y-%m-%d %H-%M-%S")
 
 import torch
 

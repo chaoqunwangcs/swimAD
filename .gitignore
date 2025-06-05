@@ -21,6 +21,7 @@ logs/
 boxmot/runs/
 boxmot/boxmot/logs/
 yolo_train/runs/
+boxmot/multiview_tool/tmp
 
 
 # update the multi_view_association code when it finished

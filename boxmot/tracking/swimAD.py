@@ -4,6 +4,7 @@ import os
 import argparse
 import cv2
 import numpy as np
+import json
 from functools import partial
 from pathlib import Path
 from datetime import datetime
@@ -81,11 +82,28 @@ def on_predict_start(predictor, persist=False):
 
     predictor.trackers = trackers
 
+def convert_np(obj):
+    """递归将 numpy 类型转为 Python 原生类型"""
+    if isinstance(obj, dict):
+        return {k: convert_np(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_np(i) for i in obj]
+    elif isinstance(obj, np.generic):
+        return obj.item()
+    else:
+        return obj
 
 @torch.no_grad()
 def run(args):
 
     LOGGER.add(args.log_path, format="{time} - {level} - {message}", level=args.log_level, rotation="100 MB")
+
+    # 新增：初始化json数据结构
+    json_data = {
+        "video_id": str(args.source),
+        "time_str": now,
+        "frame_data": {}
+    }
 
     if args.imgsz is None:
         args.imgsz = default_imgsz(args.yolo_model)
@@ -93,7 +111,6 @@ def run(args):
         args.yolo_model if is_ultralytics_model(args.yolo_model)
         else 'yolov8n.pt',
     )
-    
 
     results = yolo.track(
         source=args.source,
@@ -120,15 +137,12 @@ def run(args):
     yolo.add_callback('on_predict_start', partial(on_predict_start, persist=True))
 
     if not is_ultralytics_model(args.yolo_model):
-        # replace yolov8 model
         m = get_yolo_inferer(args.yolo_model)
         yolo_model = m(model=args.yolo_model, device=yolo.predictor.device,
                        args=yolo.predictor.args)
         yolo.predictor.model = yolo_model
 
-        # If current model is YOLOX, change the preprocess and postprocess
         if not is_ultralytics_model(args.yolo_model):
-            # add callback to save image paths for further processing
             yolo.add_callback(
                 "on_predict_batch_start",
                 lambda p: yolo_model.update_im_paths(p)
@@ -139,61 +153,99 @@ def run(args):
                 lambda preds, im, im0s:
                 yolo_model.postprocess(preds=preds, im=im, im0s=im0s))
 
-    # store custom args in predictor
     yolo.predictor.custom_args = args
 
     if args.save_video is not None:
         all_imgs = []
 
-    for frame_id, r in enumerate(results):
-        # pdb.set_trace()
-        # img = yolo.predictor.trackers[0].plot_results(r.orig_img, args.show_trajectories)
-        img = yolo.predictor.trackers[0].plot_plain_results(r.orig_img, args.show_trajectories, fontscale=1)
-        img = plot_id(img, frame_id+1)
-        # pdb.set_trace()
-        cv2.imwrite('aa.jpg', img)
-        AD_list, info_list = yolo.predictor.trackers[0].detect_AD()
-        if len(AD_list) > 0:
-            for AD in AD_list:
-                img = yolo.predictor.trackers[0].plot_AD_results(r.orig_img, args.show_trajectories, AD_list)
+    try:
+        for frame_id, r in enumerate(results):
+            img = yolo.predictor.trackers[0].plot_plain_results(r.orig_img, args.show_trajectories, fontscale=2)
+            img = plot_id(img, frame_id+1)
+            cv2.imwrite('aa.jpg', img)
+            AD_list, info_list = yolo.predictor.trackers[0].detect_AD()
+            if len(AD_list) > 0:
+                for AD in AD_list:
+                    img = yolo.predictor.trackers[0].plot_AD_results(r.orig_img, args.show_trajectories, AD_list)
 
-        if args.save_video is not None:
-            all_imgs.append(img)
+            if args.save_video is not None:
+                all_imgs.append(img)
 
-        if args.show is True:
-            cv2.imshow('BoxMOT', img)     
-            key = cv2.waitKey(1) & 0xFF
-            if key == ord(' ') or key == ord('q'):
-                break
+            if args.show is True:
+                cv2.imshow('BoxMOT', img)     
+                key = cv2.waitKey(1) & 0xFF
+                if key == ord(' ') or key == ord('q'):
+                    break
 
-        # update the info into log file
-        if len(info_list) > 0:
-            LOGGER.debug(f"Image path: {r.path}")
-            for object_info in info_list:
-                for rule_name, rule_info in object_info.items():
-                    # pdb.set_trace()
-                    try:
-                        LOGGER.debug(f"\t Frame ID: {frame_id},  Object ID: {rule_info['id']:2d}, is_AD: {bool(rule_info['is_AD'])}, max_dist: {rule_info['max_dist']:.2f}, min_dist: {rule_info['min_dist']:.2f}, move_dist: {rule_info['move_dist']:.2f}, avg_scale: {rule_info['avg_scale']:.2f}")
-                        LOGGER.debug(f"\t cls_list: {rule_info['cls_list']}, scale_list: {rule_info['scale_list']}")
-                    except:
-                        pdb.set_trace()
+            # update the info into log file
+            if len(info_list) > 0:
+                LOGGER.debug(f"Image path: {r.path}")
+                frame_key = f"{frame_id+1:04d}"
+                json_data["frame_data"][frame_key] = {}
+                for object_info in info_list:
+                    for rule_name, rule_info in object_info.items():
+                        # 只写入有效分析结果（如min_dist被计算过）
+                        if rule_info.get("min_dist", -1) == -1:
+                            continue
+                        obj_key = f"obj{rule_info['id']}"
+                        cls_list = rule_info.get("cls_list", [])
+                        class_label = cls_list[-1] if len(cls_list) > 0 else None
+                        # 保证所有指标都写入
+                        json_data["frame_data"][frame_key][obj_key] = {
+                            "class_label": class_label,
+                            "min_dist": rule_info.get("min_dist"),
+                            "max_dist": rule_info.get("max_dist"),
+                            "move_dist": rule_info.get("move_dist"),
+                            "avg_scale": rule_info.get("avg_scale"),
+                            "is_AD": rule_info.get("is_AD"),
+                            "condition_A_triggered": rule_info.get("condition_A_triggered"),
+                            "condition_B_triggered": rule_info.get("condition_B_triggered"),
+                            "final_ema_magnitude": rule_info.get("final_ema_magnitude"),
+                            "cos_theta_values": rule_info.get("cos_theta_values"),
+                            "displacement_magnitudes_list": rule_info.get("displacement_magnitudes_list"),
+                            "cls_flag_triggered": rule_info.get("cls_flag_triggered"),
+                            "scale_list": rule_info.get("scale_list"),
+                            "cls_list": rule_info.get("cls_list"),
+                            "traj_len": rule_info.get("traj_len"),
+                            "id": rule_info.get("id"),
+                            "new_movement_drowning_flag": rule_info.get("new_movement_drowning_flag"),
+                        }
+    finally:
+        # 保存json文件，递归转换numpy类型
+        if args.json_path:
+            os.makedirs(os.path.dirname(args.json_path), exist_ok=True)
+            with open(args.json_path, "w", encoding="utf-8") as f:
+                json.dump(convert_np(json_data), f, ensure_ascii=False, indent=2)
+            print(f"Saved json results to {args.json_path}")
 
-    # pdb.set_trace()
-    if args.save_video is not None:
-        os.makedirs(args.project, exist_ok=True)
-        video_path = os.path.join(args.project, args.save_video)
-        frame_size = all_imgs[0].shape[1], all_imgs[0].shape[0]
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        fps = 2
-        out = cv2.VideoWriter(video_path, fourcc, fps, frame_size)
-        for img in all_imgs:
-            out.write(img)
-        out.release()
-        print(f"Saving video in {video_path}.")
+        # 保存视频
+        if args.save_video is not None and 'all_imgs' in locals() and len(all_imgs) > 0:
+            os.makedirs(args.project, exist_ok=True)
+            video_path = os.path.join(args.project, args.save_video)
+            frame_size = all_imgs[0].shape[1], all_imgs[0].shape[0]
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            fps = 2
+            out = cv2.VideoWriter(video_path, fourcc, fps, frame_size)
+            for img in all_imgs:
+                out.write(img)
+            out.release()
+            print(f"Saving video in {video_path}.")
 
+        # 新增：保存图片包
+        if args.save_imgs is not None and 'all_imgs' in locals() and len(all_imgs) > 0:
+            img_dir = os.path.join(args.project, args.save_imgs)
+            os.makedirs(img_dir, exist_ok=True)
+            for idx, img in enumerate(all_imgs):
+                img_path = os.path.join(img_dir, f"{idx+1:04d}.jpg")
+                cv2.imwrite(img_path, img)
+            print(f"Saved image package to {img_dir}")
 def parse_opt():
     
     parser = argparse.ArgumentParser()
+    parser.add_argument('--save-imgs', type=str, default=None,
+                        help='save image package to this folder (relative to project)')
+    parser.add_argument('--json-path', type=str, default=f"logs/{now}.json",
+                        help='save json file path')
     parser.add_argument('--yolo-model', type=Path, default=WEIGHTS / 'yolov8n',
                         help='yolo model path')
     parser.add_argument('--reid-model', type=Path, default=WEIGHTS / 'osnet_x0_25_msmt17.pt',

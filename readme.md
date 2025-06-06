@@ -39,6 +39,8 @@
         python convert_data.py --version dataset_v20250506  # only once, preprocess the training structure, split the training and val set
 
         python train.py --cfg cfgs/model_yolo11l_v20250506.yaml --name yolov11l_swimAD --ckpt ../ckpts/yolo11l.pt   # train and val the model
+
+        python train.py --cfg cfgs/model_yolo11l_v20250604.yaml --name yolov11l_swimAD_v0604_bs64_e250_op_auto --ckpt ../ckpts/yolo11l.pt --device 2,3 --batch 64
         ```
     
     4. - [x] 检测模型推理和评测

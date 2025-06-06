@@ -57,7 +57,7 @@ def ensure_dir(directory_path):
     except OSError as e:
         print(f"Error creating directory {directory_path}: {e}")
 
-def parse_custom_label(label_str):
+def parse_custom_label(label_str, current_image_id=None):
     """
     Parses the LabelMe custom label string "l1,l2,l3,l4" or "l1，l2，l3，l4".
     Handles both half-width (,) and full-width (，) commas.
@@ -73,6 +73,7 @@ def parse_custom_label(label_str):
 
     parts = normalized_label_str.split(',')
     if len(parts) != 4:
+        pdb.set_trace()
         # Log the original string for better debugging
         logging.warning(f"Label string '{label_str}' (normalized: '{normalized_label_str}') does not have 4 parts after normalization. Skipping.")
         return None
@@ -82,6 +83,7 @@ def parse_custom_label(label_str):
         return labels
     except ValueError:
         # Log the original string for better debugging
+        pdb.set_trace()
         logging.warning(f"Could not convert parts of label '{label_str}' (normalized: '{normalized_label_str}') to integers. Skipping.")
         return None
 

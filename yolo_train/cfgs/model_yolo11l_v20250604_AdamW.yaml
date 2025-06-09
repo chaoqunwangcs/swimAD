@@ -10,3 +10,8 @@ pretrained: True
 seed: 42              
 deterministic: True   
 save_period: 30
+
+optimizer: AdamW
+lr0: 0.001
+momentum: 0.9
+weight_decay: 0.01

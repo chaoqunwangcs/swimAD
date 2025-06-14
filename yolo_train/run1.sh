@@ -18,8 +18,7 @@ conda activate swimAD
 # python train.py --cfg cfgs/model_yolo11l_v20250604_AdamW.yaml --name yolov11l_swimAD_v0604_bs64_e250_AdamW_lr --ckpt ../ckpts/yolo11l.pt --device 2,3 --batch 64
 
 
-python train.py --cfg cfgs/model_yolo11l_v20250604_fold_0.yaml --name yolov11l_swimAD_v0604_bs64_e250_op_auto_fold_0 --ckpt ../ckpts/yolo11l.pt --device 2,3 --batch 64
+python train.py --cfg cfgs/model_yolo11l_v20250604_fold_3.yaml --name yolov11l_swimAD_v0604_bs64_e250_op_auto_fold_3 --ckpt ../ckpts/yolo11l.pt --device 0,1 --batch 64
 
-python train.py --cfg cfgs/model_yolo11l_v20250604_fold_1.yaml --name yolov11l_swimAD_v0604_bs64_e250_op_auto_fold_1 --ckpt ../ckpts/yolo11l.pt --device 2,3 --batch 64
+python train.py --cfg cfgs/model_yolo11l_v20250604_fold_4.yaml --name yolov11l_swimAD_v0604_bs64_e250_op_auto_fold_4 --ckpt ../ckpts/yolo11l.pt --device 0,1 --batch 64
 
-python train.py --cfg cfgs/model_yolo11l_v20250604_fold_2.yaml --name yolov11l_swimAD_v0604_bs64_e250_op_auto_fold_2 --ckpt ../ckpts/yolo11l.pt --device 2,3 --batch 64

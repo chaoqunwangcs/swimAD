@@ -1,0 +1,12 @@
+data: cfgs/data_swimAD_v20250604_fold_3.yaml
+task: 'detect'
+
+epochs: 250         
+batch: 32              
+imgsz: 640             
+device: '1'          
+workers: 16             
+pretrained: True      
+seed: 42              
+deterministic: True   
+save_period: 30

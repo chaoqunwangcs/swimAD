@@ -1,0 +1,18 @@
+data: cfgs/data_swimAD_v20250604.yaml
+task: 'detect'
+
+epochs: 250         
+batch: 32              
+imgsz: 640             
+device: '1'          
+workers: 16             
+pretrained: True      
+seed: 42              
+deterministic: True   
+save_period: 30
+
+augment: True
+
+hsv_h: 0.015  # 色相增强
+hsv_s: 0.7    # 饱和度增强
+hsv_v: 0.4     # 明度增强

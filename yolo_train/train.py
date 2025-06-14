@@ -20,6 +20,7 @@ def parse_arguments():
     parser.add_argument("-p", "--ckpt", type=str, default="../ckpts/yolo11l.pt", help="the pretrained model")
     parser.add_argument("-d", "--device", type=str, default="2,3", help="the training device")
     parser.add_argument("-b", "--batch", type=int, default=64, help="the training batch size")
+    parser.add_argument("-w", "--workers", type=int, default=16, help="the training dataloader workers")
     args = parser.parse_args()
 
 
@@ -35,5 +36,6 @@ if __name__ == '__main__':
         cfg=args.cfg,                  
         name=args.name,
         device=args.device, 
-        batch=args.batch         
+        batch=args.batch,
+        workers=args.workers       
     )

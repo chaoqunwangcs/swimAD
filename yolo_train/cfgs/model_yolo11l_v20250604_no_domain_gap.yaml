@@ -1,4 +1,4 @@
-data: cfgs/data_swimAD_v20250604_custom_aug_v1.yaml
+data: cfgs/data_swimAD_v20250604_no_domain_gap.yaml
 task: 'detect'
 
 epochs: 250         
@@ -10,5 +10,3 @@ pretrained: True
 seed: 42              
 deterministic: True   
 save_period: 30
-
-augment: True

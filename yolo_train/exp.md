@@ -13,4 +13,6 @@ TODO
 3. 5折实验,实验结果依旧过拟合，不是数据划分的问题
 4. data aug: 默认开启的
 5. 降低模型参数量，从Large 降低到small or medium，依旧过拟合
-6. 更改优化器，先更改weight decay系数
+6. 更改优化器，先更改weight decay系数， 没用
+7. 可视化看着近处效果还行，需要测量不同scale object的mAP（李健）
+8. 为了防止domain gap, 前400帧训练，后100帧测试

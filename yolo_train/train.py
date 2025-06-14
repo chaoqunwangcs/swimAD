@@ -30,7 +30,9 @@ def parse_arguments():
 if __name__ == '__main__':
 
     args = parse_arguments()
+    # pdb.set_trace()
     model = YOLO(args.ckpt)  
+    # pdb.set_trace()
     results = model.train(
         trainer = CustomTrainer,
         cfg=args.cfg,                  

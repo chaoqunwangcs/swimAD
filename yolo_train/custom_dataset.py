@@ -28,7 +28,9 @@ class CustomDataset(YOLODataset):
                 file_path, anno_path = item.split(',')
                 file_path = file_path.strip()
                 anno_path = anno_path.strip()
-                assert Path(file_path).is_file() and Path(anno_path).is_file()
+                if not (Path(file_path).is_file() and Path(anno_path).is_file()):
+                    continue
+                # assert Path(file_path).is_file() and Path(anno_path).is_file()
                 f.append(file_path)
                 self.img2label_dict[file_path] = anno_path
 

@@ -32,9 +32,21 @@ TODO (0614):
 2. 增加数据diversity
 
 ## 2025。06.15
-数据增强光照部分增强失败，是因为anaconda3/envs/swimAD/lib/python3.9/site-packages/ultralytics/data/augment.py 中，albumentations库没有正确安装，同时albumentations.ImageCompression函数形参有误导致增强函数调用失败，albumentations.ImageCompression中的quality_range(75,100)改为quality_lower=75, quality_upper=100即可
+数据增强光照部分增强失败，是因为anaconda3/envs/swimAD/lib/python3.9/site-packages/ultralytics/data/augment.py 中，albumentations库没有正确安装，同时albumentations.ImageCompression函数形参有误导致增强函数调用失败，在custom_dataset中，将albumentations.ImageCompression中的quality_range(75,100)改为quality_lower=75, quality_upper=100即可
 
-其他的数据增强：
+其他的数据增强： 需要在在albumentations库中设置
 1. RandomBrightnessContrast设置p=0.1
 2. RandomGamma设置p=0.1
 3. ImageCompression设置p=0.01
+
+结果依旧不行
+
+预处理中加Normalization,结果不行，不知道是不是有问题
+
+设置更强的AUG
+1. RandomBrightnessContrast设置p=0.5
+2. RandomGamma设置p=0.5
+3. ImageCompression设置p=0.01
+4. ToGray(p=0.5), 原来是0.01
+
+上述设置还是不行

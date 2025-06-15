@@ -30,3 +30,11 @@ TODO
 TODO (0614):
 1. 数据增强(尤其光照条件)
 2. 增加数据diversity
+
+## 2025。06.15
+数据增强光照部分增强失败，是因为anaconda3/envs/swimAD/lib/python3.9/site-packages/ultralytics/data/augment.py 中，albumentations库没有正确安装，同时albumentations.ImageCompression函数形参有误导致增强函数调用失败，albumentations.ImageCompression中的quality_range(75,100)改为quality_lower=75, quality_upper=100即可
+
+其他的数据增强：
+1. RandomBrightnessContrast设置p=0.1
+2. RandomGamma设置p=0.1
+3. ImageCompression设置p=0.01

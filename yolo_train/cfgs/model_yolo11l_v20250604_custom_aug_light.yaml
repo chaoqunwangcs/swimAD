@@ -16,3 +16,9 @@ augment: True
 hsv_h: 0.015  # 色相增强
 hsv_s: 0.7    # 饱和度增强
 hsv_v: 0.4     # 明度增强
+
+# 修改anaconda3/envs/swimAD/lib/python3.9/site-packages/ultralytics/data/augment.py源码
+# 设置
+# 1. RandomBrightnessContrast设置p=0.1(默认0，之前的实验没有生效)
+# 2. RandomGamma设置p=0.1(默认0，之前的实验没有生效)
+# 3. ImageCompression设置p=0.01(默认0，之前的实验没有生效)

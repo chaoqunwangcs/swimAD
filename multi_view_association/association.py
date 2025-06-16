@@ -23,6 +23,8 @@ class Point(object):
         '''
         func:
             [TODO] find the grid index from points of a view
+            you should first anti_distortion according to the view distortion matrix
+            and find the grid index according to the grid coordinates
         input:
             None
         output:
@@ -33,6 +35,8 @@ class Point(object):
     
     def anti_distortion(self):
         '''
+        func:
+            [TODO] project the points from distortion to anti_distortion images according to the view distortion matrix
         input:
             None
         output:
@@ -53,23 +57,26 @@ class Grid(object):
     def __init__(x, y, view):
         '''
         input:
-            x, y: float number of object center
+            x, y: int number of object grid index
             view: View object
         output:
             None
         '''
-        self.x, self.y = self.projection()
+        self.x, self.y
         self.view = view
     
     def projection(self, view):
         '''
+        func:
+            [TODO] according to grid view and input view, find the projection grid on the input view
+            used for association function
         input: 
             View object
         output:
-            x, y: int number, grid index of points in a view
+            grid: Grid object of the projection grid on input view
         '''
         pass 
-        return x, y
+        return grid
 
 class View(object):
     def __init__(self, name, p1=0, p2=0, p3=0, k1=0, k2=0):
@@ -123,6 +130,8 @@ class ImageData(object):
     
     def update(self, label):
         '''
+        func:
+            update the labels
         input:
             (id, x1, y1, x2, y2)
         output: 
@@ -143,15 +152,15 @@ class ViewAssociation(object):
     def grid_projection(self, Grid):
         '''
         func:
-            given grid object of view2, find the corresponding grid object in view1
+            init the parameters of view1 and view2, used for grid projection fuction.
+            in which given grid object of view2, find the corresponding grid object in view1
         input:
             Grid: grid object in view2
         output:
-            Grid: corresponding grid object in view1
+            None, init necessary parameters
         [TODO]
         '''
         pass 
-        return Grid  
 
 class MultiViewAssociation(object):
     def __init__(self, img_root, label_root):

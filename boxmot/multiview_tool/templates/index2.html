@@ -357,14 +357,11 @@
                             </div>
                         </div>
                         <div class="col-md-6">
-                            <h5>操作工具</h5>
-                            <div class="tool-buttons">
+                            <h5>操作工具</h5>                            <div class="tool-buttons">
                                 <button class="btn btn-warning tool-btn" id="eraserTool">
                                     <i class="fas fa-eraser"></i> 橡皮擦工具
                                 </button>
-                                <button class="btn btn-danger tool-btn" id="clearCurrentBorder">
-                                    <i class="fas fa-trash"></i> 清除当前边框
-                                </button>                                <button class="btn btn-info tool-btn" id="previewGrid">
+                                <button class="btn btn-info tool-btn" id="previewGrid">
                                     <i class="fas fa-grid-3x3"></i> 预览网格
                                 </button>
                             </div>
@@ -1232,22 +1229,9 @@
                 if (calibrationData[currentCamera][borderIndex].length === 0) {
                     container.innerHTML = '<div class="text-muted small">暂无点</div>';
                 }
-            });
-        }        // 清除当前边框
-        document.getElementById('clearCurrentBorder').addEventListener('click', () => {
-            calibrationData[currentCamera][currentBorder] = [];
-            borderDefiningLines[currentCamera][currentBorder] = null; // Clear defining line
+            });        }
 
-            // If Top or Bottom border was cleared, Left/Right derived borders should also be cleared
-            // along with their defining lines.
-            if (currentBorder === 0 || currentBorder === 1) {
-                deriveLeftRightBorders(currentCamera); // This will empty L/R and their defining lines
-            }
-
-            updateCalibrationDisplay();
-            updateBorderPointsList();
-            updateStatus(`已清除相机${currentCamera + 1}的${getBorderName(currentBorder)}`, 'warning');
-        });        // 清除所有数据
+        // 清除所有数据
         document.getElementById('clearAll').addEventListener('click', () => {
             if (confirm('确定要清除所有标定数据吗？此操作不可撤销。')) {
                 for (let i = 0; i < 4; i++) {

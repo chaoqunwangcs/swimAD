@@ -315,7 +315,7 @@ class AssociationData(object):
         '''
         self.association_data[view.name] = []
         self.vis_association_data[view.name] = []
-        for label in image_data.label_data.objects:
+        for label in image_data.labels.objects:
             object_id, cx, cy = label[0], label[1], label[2]
             point = Point(cx, cy, view)
             grid = point.grid

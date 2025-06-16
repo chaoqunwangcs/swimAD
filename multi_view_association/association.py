@@ -266,14 +266,23 @@ class MultiViewAssociation(object):
         pdb.set_trace()
         association_data = AssociationData()
         main_image_data = self.views_imgs[self.main_view.name][idx]
-        association_data.LabelData2AssociationData(main_image_data.labels, self.main_view)
+        association_data.LabelData2AssociationData(main_image_data, self.main_view)
         for view in self.asso_views:
             ViewImageData = self.views_imgs[view.name][idx]
-            association_data.LabelData2AssociationData(ViewImageData.labels, view)
+            association_data.LabelData2AssociationData(ViewImageData, view)
             association_data.associate()
 
         for obj in association_data.association_data[self.main_view.name]:
             print(obj[0])       #print the associate results
+        
+        self.visualization(association_data)    # if association error happened
+    
+    def visualization(self, association_data):
+        '''
+        func:
+            [TODO] visualization the four view, including the points/grid, projection points/grid, and assocaition results
+        '''
+        pass
         
 class AssociationData(object):
     def __init__(self):
@@ -284,26 +293,34 @@ class AssociationData(object):
             {
             view1: [([idx], Point, Grid), ([idx], Point, Grid), ...]
             viewx: [([idx], Point, Grid), ([idx], Point, Grid), ...]
+            }   
+        self.vis_association_data:  # record the association process used for visualization
+            {
+            view1: [([idx], [img_path], [Point], [Grid]), ([idx], [img_path], [Point], [Grid]), ...]
+            viewx: [([idx], [img_path], [Point], [Grid]), ([idx], [img_path], [Point], [Grid]), ...]
             }
         '''
         self.association_data = {}
+        self.vis_association_data = {}
     
-    def LabelData2AssociationData(self, label_data, view):
+    def LabelData2AssociationData(self, image_data, view):
         '''
         func:
-            project LabelData to the association space and update the data in association space
+            project ImageData to the association space and update the data in association space
         input:
-            label_data: LabelData object of a view
+            image_data: ImageData object of a view
             view: View object
         output:
             update the self.association_data
         '''
         self.association_data[view.name] = []
-        for label in label_data.objects:
+        self.vis_association_data[view.name] = []
+        for label in image_data.label_data.objects:
             object_id, cx, cy = label[0], label[1], label[2]
             point = Point(cx, cy, view)
             grid = point.grid
             self.association_data[view.name].append(([object_id], point, grid))
+            self.vis_association_data[view.name].append(([object_id], [image_data.image_path], [point], [grid]))
     
     def associate(self):
         '''
@@ -322,7 +339,11 @@ class AssociationData(object):
         output:
             self.association_data:
                 {
-                view1: [([idx_view1, idx_viewx, Point', Grid']), ([idx_view1, idx_viewx, Point', Grid']), ...]
+                view1: [([idx_view1, idx_viewx], Point', Grid'), ([idx_view1, idx_viewx], Point', Grid'), ...]
+                }
+            self.vis_association_data:  # record the association process used for visualization
+                {
+                view1: [([idx_view1, idx_viewx], [img_path_view1, img_path_viewx],  [Point_view1, Point_viewx], [Grid_view1, Grid_viewx]), ...]
                 }
         [TODO]
         '''

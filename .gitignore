@@ -25,7 +25,7 @@ boxmot/multiview_tool/tmp
 
 
 # update the multi_view_association code when it finished
-multi_view_association/
+# multi_view_association/
 
 # ignore the pycache files
 */__pycache__/

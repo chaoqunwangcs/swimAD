@@ -51,6 +51,23 @@ class Point(object):
             self.is_distorted = True
             return Point
 
+    def projection(self, view):
+        '''
+        func:  
+            the same as Grid.projection
+        '''
+        pass
+    
+    def update(self, point):
+        '''
+        func:
+            update the object location with given Point and weight provided by the Point.view
+        input:
+            point: Point object
+        output:
+            None, update the Point information
+        '''
+        pass
 
 
 class Grid(object):
@@ -148,6 +165,7 @@ class ViewAssociation(object):
         '''
         self.view1 = view1
         self.view2 = view2
+        pass
     
     def grid_projection(self, Grid):
         '''
@@ -170,6 +188,7 @@ class MultiViewAssociation(object):
         self.main_view = self.views[0]
         self.asso_views = self.views[1:]
         self.views_imgs = self.scan_files()
+        pdb.set_trace()
         self.views_projections = self.init_view_association()
     
     def init_views(self):
@@ -227,7 +246,7 @@ class MultiViewAssociation(object):
             pass
         lines = sorted(lines)
         images = [os.path.join(self.img_root, view, x) for x in sorted(list(filter(lambda x: x.endswith('.jpg'), list(next(os.walk(os.path.join(self.img_root, view)))[2]))))]
-
+        # pdb.set_trace()
         res = []
         for image in images:
             res.append(ImageData(image, LabelData()))
@@ -363,5 +382,3 @@ img_root = r'/home/chaoqunwang/swimAD/dataset/dataset_v20250506/afternoon'
 label_root = r'/home/chaoqunwang/swimAD/data_transfer/mot/dataset_v20250506/afternoon'
 associator = MultiViewAssociation(img_root, label_root)
 associator.forward(0)
-
-        

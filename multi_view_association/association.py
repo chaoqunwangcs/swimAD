@@ -1,7 +1,7 @@
 import os 
 import numpy as np 
 import pdb
-
+from boxmot.multiview_tool.grid_determine import GridDeterminer
 
 class Point(object):
     def __init__(self, x, y, view, is_distorted=True):
@@ -22,16 +22,44 @@ class Point(object):
     def get_grid(self):
         '''
         func:
+            find the grid  of the point in a view
             [TODO] find the grid index from points of a view
             you should first anti_distortion according to the view distortion matrix
             and find the grid index according to the grid coordinates
         input:
             None
         output:
-            the Grid object of points in a view
+            return Grid(col, row, self.view)
+            the Grid object of points in a view or none
         '''
-        pass
+        try:
+            x, y = self.x, self.y
+            if self.is_distorted:
+                # [TODO]  调用反畸变anti_distortion
+                pass
+            
+            # 从view对象获取GridDeterminer实例
+            grid_determiner = self.view.get_grid_determiner()
+            if grid_determiner is None:
+                return None
+            
+            # 获取相机索引（从view名称转换）
+            camera_idx = int(self.view.name) - 1  # 假设view.name是'1','2','3','4'
+            
+            # 调用网格判定
+            grid_result = grid_determiner.determine_grid_cell(camera_idx, x, y)
+                      
+            if grid_result is not None:
+                col, row = grid_result
+                return Grid(col, row, self.view)
+            else:
+                return None
+            
+        except Exception as e:
+            print(f"网格判定失败: {e}")
+            return None        
         # return Grid
+    
     
     def anti_distortion(self):
         '''
@@ -71,7 +99,7 @@ class Point(object):
 
 
 class Grid(object):
-    def __init__(x, y, view):
+    def __init__(self,x, y, view):
         '''
         input:
             x, y: int number of object grid index
@@ -79,7 +107,8 @@ class Grid(object):
         output:
             None
         '''
-        self.x, self.y
+        self.x = x  # 列索引
+        self.y = y  # 行索引
         self.view = view
     
     def projection(self, view):
@@ -96,7 +125,7 @@ class Grid(object):
         return grid
 
 class View(object):
-    def __init__(self, name, p1=0, p2=0, p3=0, k1=0, k2=0):
+    def __init__(self, name, p1=0, p2=0, p3=0, k1=0, k2=0, grid_determiner=None):
         '''
         input: 
             init matrix of the view camera, used for projection
@@ -110,7 +139,16 @@ class View(object):
         self.p3 = p3
         self.k1 = k1
         self.k2 = k2 
+        self._grid_determiner = grid_determiner
 
+    def set_grid_determiner(self, grid_determiner):
+        #设置网格判定器
+        self._grid_determiner = grid_determiner
+    
+    def get_grid_determiner(self):
+        #获取网格判定器
+        return self._grid_determiner
+            
 
 class LabelData(object):
     def __init__(self, objects=[]):
@@ -181,7 +219,7 @@ class ViewAssociation(object):
         pass 
 
 class MultiViewAssociation(object):
-    def __init__(self, img_root, label_root):
+    def __init__(self, img_root, label_root,calibration_file_path):
         self.img_root = img_root
         self.label_root = label_root
         self.views = self.init_views()
@@ -190,7 +228,31 @@ class MultiViewAssociation(object):
         self.views_imgs = self.scan_files()
         pdb.set_trace()
         self.views_projections = self.init_view_association()
-    
+
+        # 初始化GridDeterminer
+        self.grid_determiner = self._init_grid_determiner(calibration_file_path)
+        
+
+    def _init_grid_determiner(self, calibration_file_path=None):
+        '''
+        func:
+            init the grid determiner instant from the calibration file
+        input:
+            calibration_file_path: str, 标定文件路径
+        output: 
+            GridDeterminer实例或None（如果初始化失败）
+        
+        '''
+        try:          
+            grid_determiner = GridDeterminer(calibration_file_path)
+            grid_determiner.load_calibration_data()
+            print(f"成功加载标定数据: {calibration_file_path}")
+            return grid_determiner
+            
+        except Exception as e:
+            print(f"加载标定数据失败: {e}")
+            return None
+                
     def init_views(self):
         '''
         func:
@@ -203,8 +265,13 @@ class MultiViewAssociation(object):
         view3 = View('3')
         view4 = View('4')
         views = [view1, view2, view3, view4]
+        
+        # 为所有View设置共享的GridDeterminer
+        for view in views:
+            view.set_grid_determiner(self.grid_determiner)
+        
         return views
-
+        
 
     
     def init_view_association(self):
@@ -330,6 +397,11 @@ class AssociationData(object):
         '''
         self.association_data = {}
         self.vis_association_data = {}
+        
+        # 先初始化GridDeterminer
+        self.grid_determiner = self._init_grid_determiner(calibration_file_path)
+        # 再初始化views（需要用到grid_determiner，View共享GridDeterminer）
+        self.views = self.init_views()
     
     def LabelData2AssociationData(self, image_data, view):
         '''
@@ -380,5 +452,6 @@ class AssociationData(object):
 
 img_root = r'/home/chaoqunwang/swimAD/dataset/dataset_v20250506/afternoon'
 label_root = r'/home/chaoqunwang/swimAD/data_transfer/mot/dataset_v20250506/afternoon'
-associator = MultiViewAssociation(img_root, label_root)
+calibration_file = r'/calibration_data.json'  # 标定文件路径
+associator = MultiViewAssociation(img_root, label_root,calibration_file)
 associator.forward(0)

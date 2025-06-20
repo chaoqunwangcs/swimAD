@@ -10,6 +10,8 @@ from boxmot.multiview_tool.grid_determine import find_position_between_lines
 
 import pdb
 
+MAIN_VIEW = '1'
+
 class Point(object):
     def __init__(self, x, y, view, is_distorted=True):
         '''
@@ -29,7 +31,7 @@ class Point(object):
     def get_grid(self):
         '''
         func:
-            [TODO] find the grid index from points of a view
+            find the grid index from points of a view
             you should first anti_distortion according to the view distortion matrix
             and find the grid index according to the grid coordinates
         input:
@@ -47,7 +49,7 @@ class Point(object):
     def anti_distortion(self):
         '''
         func:
-            [TODO] project the points from distortion to anti_distortion images according to the view distortion matrix
+            project the points from distortion to anti_distortion images according to the view distortion matrix
         input:
             None
         output:
@@ -79,9 +81,13 @@ class Point(object):
     def projection(self, view):
         '''
         func:  
-            the same as Grid.projection
+            the same as Grid.projection, find the corresponding points on the main view with given points on the view2
         '''
-        pass
+        assert view.name != self.view.name
+        assert view.name == MAIN_VIEW
+        views_projection = views_projections[f'({view.name},{self.view.name})']
+        new_point = views_projection.point_projection(self)
+        return new_point
     
     def update(self, point, weight=(1.0,1.0)):
         '''
@@ -113,7 +119,7 @@ class Grid(object):
     def projection(self, view, views_projections):
         '''
         func:
-            [TODO] according to grid view and input view, find the projection grid on the input view
+            according to grid view and input view, find the projection grid on the input view
             used for association function
         input: 
             View object, the main view
@@ -121,7 +127,7 @@ class Grid(object):
             grid: Grid object of the projection grid on input view
         '''
         assert self.view.name != view.name
-        assert view.name == '1' # input the main view
+        assert view.name == MAIN_VIEW # input the main view
         views_projection = views_projections[f'({view.name},{self.view.name})']
         new_grid = views_projection.grid_projection(self)
         return new_grid
@@ -131,7 +137,6 @@ class View(object):
         '''
         input: 
             init matrix of the view camera, used for projection
-            [TODO] you could add useful grid information
         output:
             None
         '''
@@ -238,7 +243,7 @@ class ViewAssociation(object):
         '''
         input: 
             view1, view2: View objects
-            [TODO] other necessary parameters.
+            other necessary parameters.
         '''
         self.view1 = view1
         self.view2 = view2
@@ -251,10 +256,12 @@ class ViewAssociation(object):
         self.y_shift = 0
 
         '''
-        when x_shift == 1:
-            new_x =  x_grid_num - x
-        when x_shift == 0:
-            new_x = x
+        for grid projection:
+            when x_shift == 1:
+                new_x =  x_grid_num - x
+            when x_shift == 0:
+                new_x = x
+        [TODO] need modified  corresponding to the views and grid coordinate system
         '''
         if self.view2.name == '2':  # 
             self.x_shift = 1
@@ -262,23 +269,51 @@ class ViewAssociation(object):
             self.y_shift = 1
         elif self.view2.name == '4':
             self.x_shift, self.y_shift = 1, 1
-    
+
+        '''
+        for point projection:
+        '''
+        if self.view2.name == '2':
+            # [TODO] find the corresponding points to calculate the Homography Matrix, need modified corresponding to the views and grid coordinate system
+            # the source points are points on the associate view, the target points are points on the main view
+            self.source_points = self.view2.vertical_lines[0] + self.view2.vertical_lines[-1]
+            self.target_points = self.view1.vertical_lines[0] + self.view1.vertical_lines[-1]
+        elif self.view2.name == '3':
+            pass
+        elif self.view2.name == '4':
+            pass
+
+        self.homography_matrix = cv2.findHomography(source_points, target_points)
+
     def grid_projection(self, grid):
         '''
         func:
-            init the parameters of view1 and view2, used for grid projection fuction.
-            in which given grid object of view2, find the corresponding grid object in view1
+            given grid object of view2, find the corresponding grid object in view1
         input:
             Grid: grid object in view2
         output:
             None, init necessary parameters
         '''
-        assert self.view1.name == '1'
+        assert self.view1.name == MAIN_VIEW
         assert grid.view == self.view2
         new_x = (1 - 2 * self.x_shift) * grid.x + self.x_shift * self.x_grid_num
         new_y = (1 - 2 * self.y_shift) * grid.y + self.y_shift * self.y_grid_num
         return Grid(new_x, new_y, self.view1)
 
+    def point_projection(self, point):
+        '''
+        func:
+            given point object of view2, find the corresponding point object in view1
+        input:
+            Point: point object in view2
+        output:
+            None, init necessary parameters
+        '''
+        assert point.view == self.view2
+        point_homogeneous = np.array([point.x, point.y, 1])
+        projected_point_homogeneous = self.homography_matrix @ point_homogeneous
+        projected_point = projected_point_homogeneous[:2] / projected_point_homogeneous[2]
+        return Point(projected_point[0], projected_point[1], self.view1)
 
 class MultiViewAssociation(object):
     def __init__(self, img_root, label_root, grid_root):
@@ -296,7 +331,7 @@ class MultiViewAssociation(object):
         func:
             init the view parameter used for association
             init the view name p1~p3, k1~k2
-            [TODO]: init the grid-wise weight used for multi view association
+            init the grid-wise weight used for multi view association
         '''
         with open(self.grid_root, 'r') as f:
             grid_info = json.load(f)
@@ -393,7 +428,6 @@ class MultiViewAssociation(object):
         input:
             idx: int number, frame id used for test
         output:
-            [TODO]
         '''
         association_data = AssociationData()
         main_image_data = self.views_imgs[self.main_view.name][idx]
@@ -464,7 +498,7 @@ class AssociationData(object):
             associate the results of view1 and viewx, with manually set weight, 
             the weight depend on the grid and view, could be initialized on the ViewAssociation object
             could set 1 for all views and all grid in the first version for east implement
-            [TODO] the short distance grid for each view should be larger, vice versa
+            the short distance grid for each view should be larger, vice versa
             associate with the grid index with Hungarian algorithm, update the point location and grid
         input:
             self.association_data:
@@ -481,10 +515,10 @@ class AssociationData(object):
                 {
                 view1: [([idx_view1, idx_viewx], [img_path_view1, img_path_viewx],  [Point_view1, Point_viewx], [Grid_view1, Grid_viewx]), ...]
                 }
-        [TODO]
+        [TODO] save the visualization data
         '''
         # pdb.set_trace()
-        assert len(self.views) == 2 and self.views[0].name == '1'
+        assert len(self.views) == 2 and self.views[0].name == MAIN_VIEW
         main_view = self.views[0] 
         associate_view = self.views.pop()
 

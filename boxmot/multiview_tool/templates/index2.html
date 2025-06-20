@@ -70,10 +70,8 @@
             background: white;
             overflow: hidden;
         }
-        
-        .image-container img {
+          .image-container img {
             max-width: 100%;
-            max-height: 1200px;
             cursor: crosshair;
         }
         
@@ -133,12 +131,12 @@
             padding: 20px;
             margin-bottom: 20px;
         }
-        
-        .status-indicator {
-            padding: 5px 10px;
-            border-radius: 20px;
-            font-size: 12px;
+          .status-indicator {
+            padding: 10px 20px;
+            border-radius: 25px;
+            font-size: 16px;
             font-weight: bold;
+            display: inline-block;
         }
         
         .status-success {
@@ -150,10 +148,37 @@
             background: #fff3cd;
             color: #856404;
         }
-        
-        .status-error {
+          .status-error {
             background: #f8d7da;
             color: #721c24;
+        }
+        
+        .top-status-section {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .notice-panel {
+            background: #e3f2fd;
+            border: 1px solid #90caf9;
+            border-radius: 8px;
+            padding: 15px;
+            min-height: 60px;
+        }
+        
+        .notice-panel h6 {
+            color: #1565c0;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        
+        .notice-content {
+            font-size: 14px;
+            color: #333;
+            line-height: 1.4;
         }
         
         .border-editor {
@@ -277,11 +302,41 @@
     </div>
 
     <div class="container-fluid">
-        <div class="main-container">
-            <!-- 标题头部 -->
+        <div class="main-container">            <!-- 标题头部 -->
             <div class="header">
                 <h1><i class="fas fa-swimming-pool"></i> 游泳池车道校准数据生成和可视化助手</h1>
                 <p class="mb-0">Pool Lane Calibration Data Generation and Visualization Assistant</p>
+            </div>
+
+            <!-- 状态栏和通知区域 -->
+            <div class="top-status-section">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="text-center">
+                            <h6 class="mb-2">System Stste</h6>
+                            <span class="status-indicator status-success" id="statusIndicator">
+                                <i class="fas fa-check-circle"></i> 准备就绪
+                            </span>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="notice-panel">
+                            <h6><i class="fas fa-info-circle"></i> Attention</h6>
+                            <div class="notice-content" id="noticeContent">
+                                <ul>
+                                    <li>出bug时刷新网页后重新操作</li>
+                                    <li>启用反畸变处理时，需要先上传反畸变参数文件，然后再加载图片</li>
+                                    <li>启用反畸变处理时，先选择相机，再加载新的视角上的图片</li>
+                                </ul>
+                                <strong>标定方法：</strong>
+                                <li>1.定义边框，只需要定义上下边框各两个点即可，自动生成左右边框</li>
+                                <li>2.在边框上添加点。</li>
+                                <li>可自动根据点的坐标在该边框上排序，标定先后不影响。</li>
+                                
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- 模式选择 -->
@@ -303,8 +358,7 @@
                 <h3><i class="fas fa-cog"></i> 池边校准模式</h3>
                 
                 <!-- 控制面板 -->
-                <div class="control-panel">
-                    <div class="row">
+                <div class="control-panel">                    <div class="row">
                         <div class="col-md-6">
                             <h5>图像上传</h5>
                             <div class="mb-3">
@@ -314,6 +368,10 @@
                                     <label class="form-check-label" for="enableUndistortion">
                                         启用反畸变处理
                                     </label>
+                                </div>
+                                <div class="mt-2">
+                                    <label for="antiDistortionParam" class="form-label">反畸变参数文件:</label>
+                                    <input type="file" class="form-control" id="antiDistortionParam" accept=".json">
                                 </div>
                             </div>
                         </div>
@@ -373,12 +431,11 @@
                             <div class="btn-group w-100" role="group">
                                 <button class="btn btn-success" id="saveCalibration">
                                     <i class="fas fa-save"></i> 保存标定数据
-                                </button>
-                                <button class="btn btn-primary" id="loadCalibration">
+                                </button>                                <button class="btn btn-primary" id="loadCalibration">
                                     <i class="fas fa-folder-open"></i> 加载标定数据
                                 </button>
-                                <button class="btn btn-warning" id="exportCalibration">
-                                    <i class="fas fa-download"></i> 导出数据
+                                <button class="btn btn-warning" id="loadAntiDistortionParam">
+                                    <i class="fas fa-cog"></i> 加载anti_distortion_param文件
                                 </button>
                                 <button class="btn btn-secondary" id="clearAll">
                                     <i class="fas fa-broom"></i> 清除所有
@@ -496,15 +553,7 @@
                 <!-- 结果显示 -->
                 <div class="result-display hidden" id="resultDisplay">
                     <h5><i class="fas fa-crosshairs"></i> 点击结果</h5>
-                    <div id="resultContent"></div>
-                </div>
-            </div>
-
-            <!-- 状态栏 -->
-            <div class="text-center p-3">
-                <span class="status-indicator status-success" id="statusIndicator">
-                    <i class="fas fa-check-circle"></i> 准备就绪
-                </span>
+                    <div id="resultContent"></div>                </div>
             </div>
         </div>
     </div>
@@ -524,6 +573,7 @@
         let firstPoint = null; // 边框定义的第一个点
         let eraserMode = false; // 橡皮擦模式
         let rubberBandLine = null; // 橡皮筋线条
+        let hasAntiDistortionParams = false; // 是否已上传反畸变参数文件
         
         // 存储每个边框的定义线（用于点吸附）
         let borderDefiningLines = [[], [], [], []]; // For 4 cameras
@@ -814,30 +864,36 @@
             if (file) {
                 handleImageUpload(file, 'visualization');
             }
-        });
-
-        async function handleImageUpload(file, mode) {
+        });        async function handleImageUpload(file, mode) {
             showLoading();
             
             try {
                 const enableUndistortion = mode === 'calibration' ? 
                     document.getElementById('enableUndistortion').checked : true;
+                  // 检查是否开启反畸变但未上传参数文件
+                if (enableUndistortion && !hasAntiDistortionParams) {
+                    hideLoading();
+                    console.log('反畸变检查失败: enableUndistortion =', enableUndistortion, 'hasAntiDistortionParams =', hasAntiDistortionParams);
+                    updateStatus('请先上传反畸变参数文件再进行反畸变处理', 'danger');
+                    return;
+                }
                 
-                let imageDataUrl;
+                console.log('图片上传开始: enableUndistortion =', enableUndistortion, 'hasAntiDistortionParams =', hasAntiDistortionParams, 'currentCamera =', currentCamera);
                 
-                if (enableUndistortion) {
+                let imageDataUrl;                  if (enableUndistortion) {
                     // 调用反畸变API
+                    console.log('准备调用反畸变API, currentCamera =', currentCamera);
                     const formData = new FormData();
                     formData.append('image', file);
+                    formData.append('camera_idx', currentCamera); // 传递当前相机索引
                     
                     const response = await fetch('/api/undistort_image', {
                         method: 'POST',
                         body: formData
                     });
-                    
-                    const result = await response.json();
-                    
-                    if (result.success) {
+                      const result = await response.json();
+                      console.log('反畸变API响应:', result);
+                      if (result.success) {
                         imageDataUrl = result.undistorted_image;
                         updateStatus('图像反畸变处理成功', 'success');
                     } else {
@@ -846,7 +902,7 @@
                 } else {
                     // 直接使用原图
                     imageDataUrl = await fileToDataUrl(file);
-                    updateStatus('图像上传成功', 'success');
+                    updateStatus(`图像上传成功（原图，文件大小: ${(file.size/1024/1024).toFixed(2)}MB）`, 'success');
                 }
                 
                 // 显示图像
@@ -874,12 +930,10 @@
             
             // 清除容器内容
             container.innerHTML = '';
-            
-            // 创建图像元素
+              // 创建图像元素
             const img = document.createElement('img');
             img.src = dataUrl;
             img.style.maxWidth = '100%';
-            img.style.maxHeight = '1200px';
             img.style.cursor = 'crosshair';
             img.style.display = 'block';
             img.style.margin = '0 auto';
@@ -903,14 +957,15 @@
             container.appendChild(overlay);
             
             imageElement = img;
-            
-            // 等待图像加载完成后更新覆盖层
+              // 等待图像加载完成后更新覆盖层
             img.onload = () => {
+                // 调试信息：显示图像的实际尺寸
+                console.log(`图像加载完成 - 自然尺寸: ${img.naturalWidth}x${img.naturalHeight}, 显示尺寸: ${img.clientWidth}x${img.clientHeight}`);
                 updateOverlayPosition(overlay, img);
                 if (mode === 'calibration') {
                     setTimeout(() => updateCalibrationDisplay(), 50);
                 }
-            };        }
+            };}
         
         function updateOverlayPosition(overlay, img) {
             const imgRect = img.getBoundingClientRect();
@@ -1773,24 +1828,61 @@
             document.getElementById('resultDisplay').classList.add('hidden');
             clearHighlight();
             updateStatus('已清除可视化结果', 'success');
+        });        // 加载反畸变参数文件
+        document.getElementById('loadAntiDistortionParam').addEventListener('click', () => {
+            document.getElementById('antiDistortionParam').click();
         });
-
-        // 导出数据
-        document.getElementById('exportCalibration').addEventListener('click', () => {
-            const dataStr = JSON.stringify(calibrationData, null, 2);
-            const blob = new Blob([dataStr], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
+          // 处理反畸变参数文件上传
+        document.getElementById('antiDistortionParam').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                try {
+                    const text = await file.text();
+                    const antiDistortionParams = JSON.parse(text);
+                    
+                    // 验证文件格式
+                    if (validateAntiDistortionParams(antiDistortionParams)) {
+                        // 上传参数到服务器
+                        const formData = new FormData();
+                        formData.append('anti_distortion_file', file);
+                        
+                        const response = await fetch('/api/upload_anti_distortion_params', {
+                            method: 'POST',
+                            body: formData
+                        });
+                        
+                        const result = await response.json();                        if (result.success) {
+                            // 存储参数到全局变量
+                            window.antiDistortionParams = antiDistortionParams;
+                            hasAntiDistortionParams = true; // 标记已上传参数文件
+                            console.log('反畸变参数文件上传成功，hasAntiDistortionParams =', hasAntiDistortionParams);
+                            console.log('参数内容:', antiDistortionParams);
+                            updateStatus('反畸变参数文件上传成功', 'success');
+                        } else {
+                            updateStatus('反畸变参数文件上传失败: ' + result.message, 'danger');
+                        }
+                    } else {
+                        updateStatus('反畸变参数文件格式错误', 'danger');
+                    }
+                } catch (error) {
+                    updateStatus('反畸变参数文件处理失败: ' + error.message, 'danger');
+                }
+            }
+        });
+        
+        // 验证反畸变参数格式
+        function validateAntiDistortionParams(params) {
+            const requiredViews = ['view1', 'view2', 'view3', 'view4'];
+            const requiredKeys = ['p1', 'p2', 'k1', 'k2', 'k3', 'fx_ratio', 'fy_ratio'];
             
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `calibration_data_${new Date().toISOString().slice(0, 10)}.json`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            
-            URL.revokeObjectURL(url);
-            updateStatus('标定数据已导出', 'success');
-        });        // 预览网格
+            for (const view of requiredViews) {
+                if (!params[view]) return false;
+                for (const key of requiredKeys) {
+                    if (typeof params[view][key] !== 'number') return false;
+                }
+            }
+            return true;
+        }// 预览网格
         document.getElementById('previewGrid').addEventListener('click', toggleCalibrationGridPreview);
 
         

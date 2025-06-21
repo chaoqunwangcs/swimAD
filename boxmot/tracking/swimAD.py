@@ -184,13 +184,11 @@ def run(args):
                 json_data["frame_data"][frame_key] = {}
                 for object_info in info_list:
                     for rule_name, rule_info in object_info.items():
-                        # 只写入有效分析结果（如min_dist被计算过）
-                        if rule_info.get("min_dist", -1) == -1:
-                            continue
                         obj_key = f"obj{rule_info['id']}"
                         cls_list = rule_info.get("cls_list", [])
                         class_label = cls_list[-1] if len(cls_list) > 0 else None
                         # 保证所有指标都写入
+                        bbox = rule_info.get("bbox")
                         json_data["frame_data"][frame_key][obj_key] = {
                             "class_label": class_label,
                             "min_dist": rule_info.get("min_dist"),
@@ -209,6 +207,8 @@ def run(args):
                             "traj_len": rule_info.get("traj_len"),
                             "id": rule_info.get("id"),
                             "new_movement_drowning_flag": rule_info.get("new_movement_drowning_flag"),
+                            "bbox_left_top": [bbox[0], bbox[1]] if bbox else None,         # 左上角 [x1, y1]
+                            "bbox_right_bottom": [bbox[2], bbox[3]] if bbox else None      # 右下角 [x2, y2]
                         }
     finally:
         # 保存json文件，递归转换numpy类型

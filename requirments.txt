@@ -5,3 +5,5 @@ tqdm
 git+https://github.com/mikel-brostrom/ultralytics.git
 tensorboard
 albumentations==1.0.3
+flask
+flask_cors

@@ -12,10 +12,13 @@ from boxmot.trackers.ocsort.ocsort import OcSort
 from boxmot.trackers.strongsort.strongsort import StrongSort
 from boxmot.trackers.imprassoc.imprassoctrack import ImprAssocTrack
 from boxmot.trackers.boosttrack.boosttrack import BoostTrack
+from boxmot.multiview_tool.grid_determine import GridDeterminer
 
 
 TRACKERS = ['bytetrack', 'botsort', 'strongsort', 'ocsort', 'deepocsort', 'hybridsort', 'imprassoc', 'boosttrack']
 
+TOOLS = ['GridDeterminer']
+
 __all__ = ("__version__",
            "StrongSort", "OcSort", "ByteTrack", "BotSort", "DeepOcSort", "HybridSort", "ImprAssocTrack", "BoostTrack",
-           "create_tracker", "get_tracker_config", "gsi")
+           "create_tracker", "get_tracker_config", "gsi", "GridDeterminer")

@@ -1,0 +1,1948 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>游泳池车道校准数据生成和可视化助手</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .main-container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+            margin: 20px 0;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 15px 15px 0 0;
+            text-align: center;
+        }
+        
+        .mode-selector {
+            margin: 20px 0;
+        }
+        
+        .mode-btn {
+            margin: 10px;
+            min-width: 200px;
+            height: 60px;
+            font-size: 16px;
+            border-radius: 10px;
+            transition: all 0.3s ease;
+        }
+        
+        .mode-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        .content-panel {
+            margin: 20px;
+            padding: 20px;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            background: #f8f9fa;
+        }
+        
+        .image-container {
+            position: relative;
+            border: 2px dashed #dee2e6;
+            border-radius: 10px;
+            min-height: 400px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: white;
+            overflow: hidden;
+        }
+        
+        .image-container img {
+            max-width: 100%;
+            max-height: 1200px;
+            cursor: crosshair;
+        }
+        
+        .image-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        
+        .calibration-point {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            border: 2px solid white;
+            transform: translate(-50%, -50%);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            z-index: 15;
+        }
+        
+        .calibration-point:hover {
+            width: 12px;
+            height: 12px;
+            border-width: 3px;
+        }
+        
+        .calibration-line {
+            position: absolute;
+            height: 2px;
+            background: #ff4757;
+            transform-origin: left center;
+            pointer-events: none;
+        }
+        
+        .grid-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .grid-cell {
+            position: absolute;
+            border: 1px solid rgba(74, 144, 226, 0.6);
+            background: rgba(74, 144, 226, 0.1);
+            pointer-events: none;
+        }
+        
+        .control-panel {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .status-indicator {
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .status-success {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status-warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .border-editor {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        
+        .border-name {
+            font-weight: bold;
+            color: #495057;
+            margin-bottom: 10px;
+        }
+        
+        .point-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .point-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 5px 10px;
+            margin: 2px 0;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+        
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+        
+        .loading-spinner {
+            color: white;
+            font-size: 3rem;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        .camera-selector {
+            margin: 15px 0;
+        }
+        
+        .camera-btn {
+            margin: 5px;
+            width: 100px;
+            height: 50px;
+        }
+        
+        .camera-btn.active {
+            background: #007bff;
+            border-color: #007bff;
+        }
+        
+        .tool-buttons {
+            margin: 15px 0;
+        }
+        
+        .tool-btn {
+            transition: all 0.3s ease;
+            margin: 5px;
+        }
+        
+        .tool-btn.active {
+            background-color: #dc3545 !important;
+            color: white !important;
+            border-color: #dc3545 !important;
+        }
+        
+        .result-display {
+            background: #e9ecef;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+            font-family: monospace;
+        }
+        
+        .border-definition-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-bottom: 10px;
+        }
+        
+        .border-def-btn {
+            flex: 1;
+            min-width: 160px;
+            font-size: 12px;
+            padding: 8px 10px;
+            margin: 2px;
+            transition: all 0.3s ease;
+        }
+        
+        .border-def-btn.active {
+            background-color: #0d6efd !important;
+            color: white !important;
+            border-color: #0d6efd !important;
+        }
+    </style>
+</head>
+<body>
+    <!-- 加载遮罩 -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner">
+            <i class="fas fa-spinner fa-spin"></i>
+        </div>
+    </div>
+
+    <div class="container-fluid">
+        <div class="main-container">
+            <!-- 标题头部 -->
+            <div class="header">
+                <h1><i class="fas fa-swimming-pool"></i> 游泳池车道校准数据生成和可视化助手</h1>
+                <p class="mb-0">Pool Lane Calibration Data Generation and Visualization Assistant</p>
+            </div>
+
+            <!-- 模式选择 -->
+            <div class="mode-selector text-center">
+                <button class="btn btn-primary mode-btn" id="calibrationModeBtn">
+                    <i class="fas fa-cog"></i><br>
+                    池边校准模式<br>
+                    <small>Pool Calibration Mode</small>
+                </button>
+                <button class="btn btn-success mode-btn" id="visualizationModeBtn">
+                    <i class="fas fa-eye"></i><br>
+                    可视化模式<br>
+                    <small>Visualization Mode</small>
+                </button>
+            </div>
+
+            <!-- 校准模式面板 -->
+            <div class="content-panel hidden" id="calibrationPanel">
+                <h3><i class="fas fa-cog"></i> 池边校准模式</h3>
+                
+                <!-- 控制面板 -->
+                <div class="control-panel">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h5>图像上传</h5>
+                            <div class="mb-3">
+                                <input type="file" class="form-control" id="imageUpload" accept="image/*">
+                                <div class="form-check mt-2">
+                                    <input class="form-check-input" type="checkbox" id="enableUndistortion" checked>
+                                    <label class="form-check-label" for="enableUndistortion">
+                                        启用反畸变处理
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <h5>相机选择</h5>
+                            <div class="camera-selector">
+                                <button class="btn btn-outline-primary camera-btn active" data-camera="0">相机 1</button>
+                                <button class="btn btn-outline-primary camera-btn" data-camera="1">相机 2</button>
+                                <button class="btn btn-outline-primary camera-btn" data-camera="2">相机 3</button>
+                                <button class="btn btn-outline-primary camera-btn" data-camera="3">相机 4</button>
+                            </div>
+                        </div>
+                    </div>                    <div class="row">
+                        <div class="col-md-6">
+                            <h5>边框定义</h5>
+                            <div class="border-definition-buttons mb-3">
+                                <button class="btn btn-outline-primary btn-sm border-def-btn" data-border="0">
+                                    <i class="fas fa-minus"></i> 标定上方横边 (边0)
+                                </button>
+                                <button class="btn btn-outline-primary btn-sm border-def-btn" data-border="1">
+                                    <i class="fas fa-minus"></i> 标定下方横边 (边1)
+                                </button>                                <button class="btn btn-outline-primary btn-sm border-def-btn" data-border="2" style="display: none;">
+                                    <i class="fas fa-grip-lines-vertical"></i> 标定左侧纵边 (边2)
+                                </button>
+                                <button class="btn btn-outline-primary btn-sm border-def-btn" data-border="3" style="display: none;">
+                                    <i class="fas fa-grip-lines-vertical"></i> 标定右侧纵边 (边3)
+                                </button>
+                            </div>                              <h5>边框选择 (添加点)</h5>
+                            <div class="btn-group w-100" role="group">
+                                <input type="radio" class="btn-check" name="borderSelect" id="topBorder" value="0" checked>
+                                <label class="btn btn-outline-warning" for="topBorder">上边框</label>
+                                
+                                <input type="radio" class="btn-check" name="borderSelect" id="bottomBorder" value="1">
+                                <label class="btn btn-outline-warning" for="bottomBorder">下边框</label>
+                                
+                                <input type="radio" class="btn-check" name="borderSelect" id="leftBorder" value="2">
+                                <label class="btn btn-outline-warning" for="leftBorder">左边框</label>
+                                
+                                <input type="radio" class="btn-check" name="borderSelect" id="rightBorder" value="3">
+                                <label class="btn btn-outline-warning" for="rightBorder">右边框</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <h5>操作工具</h5>                            <div class="tool-buttons">
+                                <button class="btn btn-warning tool-btn" id="eraserTool">
+                                    <i class="fas fa-eraser"></i> 橡皮擦工具
+                                </button>
+                                <button class="btn btn-info tool-btn" id="previewGrid">
+                                    <i class="fas fa-grid-3x3"></i> 预览网格
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-12">
+                            <div class="btn-group w-100" role="group">
+                                <button class="btn btn-success" id="saveCalibration">
+                                    <i class="fas fa-save"></i> 保存标定数据
+                                </button>
+                                <button class="btn btn-primary" id="loadCalibration">
+                                    <i class="fas fa-folder-open"></i> 加载标定数据
+                                </button>
+                                <button class="btn btn-warning" id="exportCalibration">
+                                    <i class="fas fa-download"></i> 导出数据
+                                </button>
+                                <button class="btn btn-secondary" id="clearAll">
+                                    <i class="fas fa-broom"></i> 清除所有
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 图像显示区域 -->
+                <div class="image-container" id="calibrationImageContainer">
+                    <div class="text-muted">
+                        <i class="fas fa-cloud-upload-alt fa-3x mb-3"></i>
+                        <p>点击上方"选择文件"按钮上传图像开始校准</p>
+                    </div>
+                    <div class="image-overlay" id="calibrationOverlay"></div>
+                </div>
+
+                <!-- 边框编辑器 -->
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="border-editor">
+                            <div class="border-name" style="color: #ff6b6b;">
+                                <i class="fas fa-arrow-up"></i> 上边框 (Top)
+                            </div>
+                            <div class="point-list" id="topBorderPoints"></div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="border-editor">
+                            <div class="border-name" style="color: #4ecdc4;">
+                                <i class="fas fa-arrow-down"></i> 下边框 (Bottom)
+                            </div>
+                            <div class="point-list" id="bottomBorderPoints"></div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="border-editor">
+                            <div class="border-name" style="color: #45b7d1;">
+                                <i class="fas fa-arrow-left"></i> 左边框 (Left)
+                            </div>
+                            <div class="point-list" id="leftBorderPoints"></div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="border-editor">
+                            <div class="border-name" style="color: #f9ca24;">
+                                <i class="fas fa-arrow-right"></i> 右边框 (Right)
+                            </div>
+                            <div class="point-list" id="rightBorderPoints"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 可视化模式面板 -->
+            <div class="content-panel hidden" id="visualizationPanel">
+                <h3><i class="fas fa-eye"></i> 可视化模式</h3>
+                
+                <!-- 控制面板 -->
+                <div class="control-panel">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h5>图像上传</h5>
+                            <input type="file" class="form-control" id="vizImageUpload" accept="image/*">
+                        </div>
+                        <div class="col-md-6">
+                            <h5>相机选择</h5>
+                            <div class="camera-selector">
+                                <button class="btn btn-outline-primary camera-btn active" data-camera="0" id="vizCamera0">相机 1</button>
+                                <button class="btn btn-outline-primary camera-btn" data-camera="1" id="vizCamera1">相机 2</button>
+                                <button class="btn btn-outline-primary camera-btn" data-camera="2" id="vizCamera2">相机 3</button>
+                                <button class="btn btn-outline-primary camera-btn" data-camera="3" id="vizCamera3">相机 4</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-12">
+                            <div class="btn-group w-100" role="group">
+                                <button class="btn btn-primary" id="loadCalibrationViz">
+                                    <i class="fas fa-folder-open"></i> 加载标定数据
+                                </button>
+                                <button class="btn btn-success" id="showGrid">
+                                    <i class="fas fa-th"></i> 显示网格
+                                </button>
+                                <button class="btn btn-warning" id="hideGrid">
+                                    <i class="fas fa-eye-slash"></i> 隐藏网格
+                                </button>
+                                <button class="btn btn-info" id="clearVizResults">
+                                    <i class="fas fa-eraser"></i> 清除结果
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                      <div class="row">
+                        <div class="col-md-12">
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle"></i>
+                                <strong>操作说明：</strong>点击图像上的任意位置，系统会自动判定该点位于哪个网格单元。
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 图像显示区域 -->
+                <div class="image-container" id="visualizationImageContainer">
+                    <div class="text-muted">
+                        <i class="fas fa-image fa-3x mb-3"></i>
+                        <p>上传图像并加载标定数据开始可视化验证</p>
+                    </div>
+                    <div class="grid-overlay" id="gridOverlay"></div>
+                </div>
+
+                <!-- 结果显示 -->
+                <div class="result-display hidden" id="resultDisplay">
+                    <h5><i class="fas fa-crosshairs"></i> 点击结果</h5>
+                    <div id="resultContent"></div>
+                </div>
+            </div>
+
+            <!-- 状态栏 -->
+            <div class="text-center p-3">
+                <span class="status-indicator status-success" id="statusIndicator">
+                    <i class="fas fa-check-circle"></i> 准备就绪
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>        // 全局变量
+        let currentMode = 'calibration';
+        let currentCamera = 0;
+        let currentBorder = 0;
+        let calibrationData = [[], [], [], []]; // 4个相机的数据
+        let imageElement = null;
+        let calibrationGridPreviewVisible  = false;
+        let borderDefinitionMode = false; // 边框定义模式
+        let borderDefinitionStep = 0; // 边框定义步骤 (0=等待第一个点, 1=等待第二个点)
+        let firstPoint = null; // 边框定义的第一个点
+        let eraserMode = false; // 橡皮擦模式
+        let rubberBandLine = null; // 橡皮筋线条
+        
+        // 存储每个边框的定义线（用于点吸附）
+        let borderDefiningLines = [[], [], [], []]; // For 4 cameras
+        for (let i = 0; i < 4; i++) {
+            // Each border (0-3) can have an object { p1: [x,y], p2: [x,y] } or null
+            borderDefiningLines[i] = [null, null, null, null]; 
+        }
+        
+        // 初始化四个相机的边框数据
+        for (let i = 0; i < 4; i++) {
+            calibrationData[i] = [[], [], [], []]; // 每个相机4个边框
+        }
+
+        // 模式切换
+        document.getElementById('calibrationModeBtn').addEventListener('click', () => {
+            switchMode('calibration');
+        });
+
+        document.getElementById('visualizationModeBtn').addEventListener('click', () => {
+            switchMode('visualization');
+        });
+
+        // --- BEGIN NEW UTILITY FUNCTIONS ---
+
+        /**
+         * Gets an existing canvas or creates a new one within the specified container,
+         * sized and positioned relative to a given image element.
+         * @param {string} containerElementId - ID of the parent container for the canvas.
+         * @param {string} canvasId - Desired ID for the canvas.
+         * @param {HTMLImageElement} imageEl - The image element for sizing and positioning.
+         * @returns {HTMLCanvasElement|null} The canvas element or null if inputs are invalid.
+         */
+        function getOrCreateCanvas(containerElementId, canvasId, imageEl) {
+            let canvas = document.getElementById(canvasId);
+            const container = document.getElementById(containerElementId);
+
+            if (!container || !imageEl || !imageEl.naturalWidth || !imageEl.naturalHeight) {
+                // console.error("Container, image element, or image dimensions not valid for canvas creation:", containerElementId, imageEl);
+                if (imageEl && (!imageEl.naturalWidth || !imageEl.naturalHeight)) {
+                    updateStatus('图像尚未完全加载以创建绘图区域', 'warning');
+                }
+                return null;
+            }
+
+            if (!canvas) {
+                canvas = document.createElement('canvas');
+                canvas.id = canvasId;
+                canvas.style.position = 'absolute';
+                canvas.style.pointerEvents = 'none';
+                canvas.style.zIndex = '10'; // Ensure grid is above image, adjust if needed
+                container.appendChild(canvas);
+            }
+
+            const imgRect = imageEl.getBoundingClientRect();
+            const containerRect = container.getBoundingClientRect();
+
+            canvas.style.left = (imgRect.left - containerRect.left) + 'px';
+            canvas.style.top = (imgRect.top - containerRect.top) + 'px';
+            canvas.width = imageEl.clientWidth; // Use clientWidth for display size
+            canvas.height = imageEl.clientHeight; // Use clientHeight for display size
+
+            return canvas;
+        }        /**
+         * Removes a canvas element from the DOM by its ID.
+         * @param {string} canvasId - The ID of the canvas to remove.
+         */
+        function removeCanvas(canvasId) {
+            const canvas = document.getElementById(canvasId);
+            if (canvas) {
+                canvas.remove();
+            }
+        }
+
+        /**
+         * Projects point p onto the line defined by points a and b.
+         * @param {Array<number>} p - Point to project [x, y].
+         * @param {Array<number>} a - First point of the line segment [x, y].
+         * @param {Array<number>} b - Second point of the line segment [x, y].
+         * @returns {Array<number>} The projected point [x, y].
+         */
+        function projectPointOntoLine(p, a, b) {
+            const x_p = p[0], y_p = p[1];
+            const x_a = a[0], y_a = a[1];
+            const x_b = b[0], y_b = b[1];
+
+            const ab_x = x_b - x_a;
+            const ab_y = y_b - y_a;
+            const ap_x = x_p - x_a;
+            const ap_y = y_p - y_a;
+
+            const dot_ap_ab = ap_x * ab_x + ap_y * ab_y;
+            const dot_ab_ab = ab_x * ab_x + ab_y * ab_y;
+
+            // If a and b are the same point, line is undefined for projection.
+            // Return point 'a' (or 'p' if no snapping is desired in this degenerate case).
+            if (dot_ab_ab < 0.000001) { // Check for very small length (essentially a point)
+                return [x_a, y_a]; 
+            }
+
+            const t = dot_ap_ab / dot_ab_ab;
+            const projectedX = x_a + t * ab_x;
+            const projectedY = y_a + t * ab_y;
+
+            return [projectedX, projectedY];
+        }
+
+        /**
+         * Draws a grid on the provided canvas context based on calibration data.
+         * @param {HTMLCanvasElement} canvas - The canvas element to draw on.
+         * @param {Array<Array<Array<number>>>} cameraCalibData - Calibration data for the current camera.         * @param {HTMLImageElement} imageEl - The image element for scaling.
+         * @param {object} options - Drawing options (lineColor, lineWidth, etc.).
+         */
+        function drawGridOnCanvas(canvas, cameraCalibData, imageEl, options) {
+            if (!canvas || !cameraCalibData || !imageEl || !imageEl.naturalWidth || !imageEl.naturalHeight) {
+                 console.warn("Cannot draw grid, missing canvas, data, or image dimensions.");
+                 return;
+            }
+
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const topPoints = cameraCalibData[0];
+            const bottomPoints = cameraCalibData[1];
+            const leftPoints = cameraCalibData[2];
+            const rightPoints = cameraCalibData[3];            const defaultOptions = {
+                lineColor: '#00FF00', // Green
+                lineWidth: 2,
+                shadowColor: 'rgba(0, 0, 0, 0.5)',
+                shadowBlur: 2
+            };
+            const currentOptions = { ...defaultOptions, ...options };
+
+            const scaleX = canvas.width / imageEl.naturalWidth;
+            const scaleY = canvas.height / imageEl.naturalHeight;
+
+            ctx.strokeStyle = currentOptions.lineColor;
+            ctx.lineWidth = currentOptions.lineWidth;
+            if (currentOptions.shadowColor && currentOptions.shadowBlur > 0) {
+                ctx.shadowColor = currentOptions.shadowColor;
+                ctx.shadowBlur = currentOptions.shadowBlur;
+            } else {
+                ctx.shadowColor = 'transparent';
+                ctx.shadowBlur = 0;
+            }
+
+            // Draw horizontal grid lines (connecting top and bottom border points)
+            if (topPoints.length === bottomPoints.length && topPoints.length >= 2) {
+                for (let i = 0; i < topPoints.length; i++) {
+                    ctx.beginPath();
+                    ctx.moveTo(topPoints[i][0] * scaleX, topPoints[i][1] * scaleY);
+                    ctx.lineTo(bottomPoints[i][0] * scaleX, bottomPoints[i][1] * scaleY);
+                    ctx.stroke();
+                }
+            }
+
+            // Draw vertical grid lines (connecting left and right border points)
+            if (leftPoints.length === rightPoints.length && leftPoints.length >= 2) {
+                for (let i = 0; i < leftPoints.length; i++) {
+                    ctx.beginPath();
+                    ctx.moveTo(leftPoints[i][0] * scaleX, leftPoints[i][1] * scaleY);
+                    ctx.lineTo(rightPoints[i][0] * scaleX, rightPoints[i][1] * scaleY);
+                    ctx.stroke();
+                }
+            }
+              // Reset shadow for text drawing
+            ctx.shadowColor = 'transparent';
+            ctx.shadowBlur = 0;
+        }
+        
+        /**
+        * Derives the left and right borders based on the endpoints of the top and bottom borders
+        * for a given camera.
+        * Left border: [first point of Top, first point of Bottom]
+        * Right border: [last point of Top, last point of Bottom]
+        * @param {number} cameraIndex - The index of the camera whose borders are to be updated.
+        */        function deriveLeftRightBorders(cameraIndex) {
+            if (!calibrationData[cameraIndex]) return;
+
+            const topBorderPoints = calibrationData[cameraIndex][0]; // Border 0: Top
+            const bottomBorderPoints = calibrationData[cameraIndex][1]; // Border 1: Bottom
+
+            // Clear existing derived borders first
+            calibrationData[cameraIndex][2] = []; // Border 2: Left
+            calibrationData[cameraIndex][3] = []; // Border 3: Right
+            borderDefiningLines[cameraIndex][2] = null; // Clear defining line for Left
+            borderDefiningLines[cameraIndex][3] = null; // Clear defining line for Right
+
+            if (topBorderPoints.length > 0 && bottomBorderPoints.length > 0) {
+                const T1 = topBorderPoints[0]; // First point of Top border
+                const B1 = bottomBorderPoints[0]; // First point of Bottom border
+                const leftInitialPoints = [[...T1], [...B1]].sort((a, b) => a[1] - b[1]);
+                calibrationData[cameraIndex][2] = leftInitialPoints;
+                if (leftInitialPoints.length === 2) {
+                    borderDefiningLines[cameraIndex][2] = { p1: [...leftInitialPoints[0]], p2: [...leftInitialPoints[1]] };
+                }
+
+                const Tn = topBorderPoints[topBorderPoints.length - 1]; // Last point of Top border
+                const Bn = bottomBorderPoints[bottomBorderPoints.length - 1]; // Last point of Bottom border
+                const rightInitialPoints = [[...Tn], [...Bn]].sort((a, b) => a[1] - b[1]);
+                calibrationData[cameraIndex][3] = rightInitialPoints;
+                if (rightInitialPoints.length === 2) {
+                    borderDefiningLines[cameraIndex][3] = { p1: [...rightInitialPoints[0]], p2: [...rightInitialPoints[1]] };
+                }
+            }
+        }
+          function switchMode(mode) {
+            currentMode = mode;
+            
+            if (mode === 'calibration') {
+                document.getElementById('calibrationPanel').classList.remove('hidden');
+                document.getElementById('visualizationPanel').classList.add('hidden');
+                document.getElementById('calibrationModeBtn').classList.add('active');
+                document.getElementById('visualizationModeBtn').classList.remove('active');
+            } else {
+                document.getElementById('calibrationPanel').classList.add('hidden');
+                document.getElementById('visualizationPanel').classList.remove('hidden');
+                document.getElementById('calibrationModeBtn').classList.remove('active');
+                document.getElementById('visualizationModeBtn').classList.add('active');
+            }
+            
+            updateStatus(`已切换到${mode === 'calibration' ? '校准' : '可视化'}模式`, 'success');
+        }
+
+        // 状态更新
+        function updateStatus(message, type = 'success') {
+            const indicator = document.getElementById('statusIndicator');
+            const iconMap = {
+                'success': 'fas fa-check-circle',
+                'warning': 'fas fa-exclamation-triangle',
+                'error': 'fas fa-times-circle'
+            };
+            
+            indicator.className = `status-indicator status-${type}`;
+            indicator.innerHTML = `<i class="${iconMap[type]}"></i> ${message}`;
+        }
+
+        // 显示/隐藏加载遮罩
+        function showLoading() {
+            document.getElementById('loadingOverlay').style.display = 'flex';
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingOverlay').style.display = 'none';
+        }
+
+        // 相机选择
+        document.querySelectorAll('.camera-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                // 移除其他按钮的active类
+                this.parentElement.querySelectorAll('.camera-btn').forEach(b => b.classList.remove('active'));
+                // 添加active类到当前按钮
+                this.classList.add('active');
+                
+                currentCamera = parseInt(this.dataset.camera);
+                updateStatus(`已选择相机 ${currentCamera + 1}`, 'success');
+                
+                // 如果在校准模式，更新点显示
+                if (currentMode === 'calibration') {
+                    updateCalibrationDisplay();
+                }
+            });
+        });
+
+        // 边框选择
+        document.querySelectorAll('input[name="borderSelect"]').forEach(radio => {
+            radio.addEventListener('change', function() {
+                currentBorder = parseInt(this.value);
+                updateStatus(`已选择${getBorderName(currentBorder)}`, 'success');
+            });
+        });
+
+        function getBorderName(borderIndex) {
+            const names = ['上边框', '下边框', '左边框', '右边框'];
+            return names[borderIndex];
+        }
+
+        // 图像上传处理（校准模式）
+        document.getElementById('imageUpload').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                handleImageUpload(file, 'calibration');
+            }
+        });
+
+        // 图像上传处理（可视化模式）
+        document.getElementById('vizImageUpload').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                handleImageUpload(file, 'visualization');
+            }
+        });
+
+        async function handleImageUpload(file, mode) {
+            showLoading();
+            
+            try {
+                const enableUndistortion = mode === 'calibration' ? 
+                    document.getElementById('enableUndistortion').checked : true;
+                
+                let imageDataUrl;
+                
+                if (enableUndistortion) {
+                    // 调用反畸变API
+                    const formData = new FormData();
+                    formData.append('image', file);
+                    
+                    const response = await fetch('/api/undistort_image', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        imageDataUrl = result.undistorted_image;
+                        updateStatus('图像反畸变处理成功', 'success');
+                    } else {
+                        throw new Error(result.message);
+                    }
+                } else {
+                    // 直接使用原图
+                    imageDataUrl = await fileToDataUrl(file);
+                    updateStatus('图像上传成功', 'success');
+                }
+                
+                // 显示图像
+                displayImage(imageDataUrl, mode);
+                
+            } catch (error) {
+                updateStatus(`图像处理失败: ${error.message}`, 'error');
+                console.error('Error processing image:', error);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        function fileToDataUrl(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = () => reject(new Error('文件读取失败'));
+                reader.readAsDataURL(file);
+            });
+        }        function displayImage(dataUrl, mode) {
+            const container = mode === 'calibration' ? 
+                document.getElementById('calibrationImageContainer') : 
+                document.getElementById('visualizationImageContainer');
+            
+            // 清除容器内容
+            container.innerHTML = '';
+            
+            // 创建图像元素
+            const img = document.createElement('img');
+            img.src = dataUrl;
+            img.style.maxWidth = '100%';
+            img.style.maxHeight = '1200px';
+            img.style.cursor = 'crosshair';
+            img.style.display = 'block';
+            img.style.margin = '0 auto';
+            
+            // 添加点击事件
+            if (mode === 'calibration') {
+                img.addEventListener('click', handleCalibrationImageClick);
+            } else {
+                img.addEventListener('click', handleVisualizationImageClick);
+            }
+            
+            container.appendChild(img);
+            
+            // 创建覆盖层
+            const overlay = document.createElement('div');
+            overlay.className = mode === 'calibration' ? 'image-overlay' : 'grid-overlay';
+            overlay.id = mode === 'calibration' ? 'calibrationOverlay' : 'gridOverlay';
+            overlay.style.position = 'absolute';
+            overlay.style.pointerEvents = 'none';
+            overlay.style.zIndex = '15';
+            container.appendChild(overlay);
+            
+            imageElement = img;
+            
+            // 等待图像加载完成后更新覆盖层
+            img.onload = () => {
+                updateOverlayPosition(overlay, img);
+                if (mode === 'calibration') {
+                    setTimeout(() => updateCalibrationDisplay(), 50);
+                }
+            };        }
+        
+        function updateOverlayPosition(overlay, img) {
+            const imgRect = img.getBoundingClientRect();
+            const containerRect = img.parentElement.getBoundingClientRect();
+            
+            overlay.style.left = (imgRect.left - containerRect.left) + 'px';
+            overlay.style.top = (imgRect.top - containerRect.top) + 'px';
+            overlay.style.width = imgRect.width + 'px';
+            overlay.style.height = imgRect.height + 'px';
+        }
+        
+        function handleCalibrationImageClick(e) {
+            const rect = e.target.getBoundingClientRect();
+            const img = e.target;
+            
+            // 获取鼠标在图像容器中的坐标
+            const clientX = e.clientX - rect.left;
+            const clientY = e.clientY - rect.top;
+            
+            // 计算图像的实际显示尺寸与原始尺寸的比例
+            const scaleX = img.naturalWidth / img.clientWidth;
+            const scaleY = img.naturalHeight / img.clientHeight;
+            
+            // 转换为图像原始坐标
+            const x = clientX * scaleX;
+            const y = clientY * scaleY;
+            
+            if (eraserMode) {
+                // 橡皮擦模式：查找并删除最近的点
+                handleEraserClick(x, y);
+            } else if (borderDefinitionMode) {
+                // 边框定义模式
+                handleBorderDefinitionClick(x, y);
+            } else {
+                // 普通添加点模式
+                addCalibrationPoint(x, y);
+            }
+        }
+
+        function handleEraserClick(x, y) {
+            const threshold = 20; // 点击阈值（像素）
+            let foundPoint = false;
+            
+            // 在当前相机的所有边框中查找最近的点
+            for (let borderIdx = 0; borderIdx < 4; borderIdx++) {
+                const points = calibrationData[currentCamera][borderIdx];
+                for (let i = 0; i < points.length; i++) {
+                    const [px, py] = points[i];
+                    const distance = Math.sqrt((x - px) ** 2 + (y - py) ** 2);
+                    
+                    if (distance <= threshold) {
+                        // 删除这个点
+                        points.splice(i, 1);
+                        updateCalibrationDisplay();
+                        updateBorderPointsList();
+                        updateStatus(`已删除${getBorderName(borderIdx)}的一个标定点`, 'warning');
+                        foundPoint = true;
+                        return;
+                    }
+                }
+            }
+            
+            if (!foundPoint) {
+                updateStatus('未找到可删除的标定点，请点击更靠近标定点的位置', 'warning');
+            }
+        }        function handleBorderDefinitionClick(x, y) {
+            if (borderDefinitionStep === 0) {
+                // 第一个点
+                firstPoint = [x, y];
+                borderDefinitionStep = 1;
+                
+                // 显示第一个点
+                calibrationData[currentCamera][currentBorder] = [[x, y]];
+                updateCalibrationDisplay();
+                
+                updateStatus(`已选择第一个点 (${Math.round(x)}, ${Math.round(y)})，请选择第二个点`, 'info');
+                
+                // 开始橡皮筋预览
+                startRubberBandPreview(x, y);
+            } else if (borderDefinitionStep === 1) {
+                // 第二个点
+                const secondPoint = [x, y];
+                
+                // 按规则排序点
+                const sortedPoints = sortBorderPoints([firstPoint, secondPoint], currentBorder);
+                calibrationData[currentCamera][currentBorder] = sortedPoints;
+
+                // Store the defining line for this border (Top or Bottom)
+                if (sortedPoints.length === 2) {
+                    borderDefiningLines[currentCamera][currentBorder] = { p1: [...sortedPoints[0]], p2: [...sortedPoints[1]] };
+                } else { // Should not happen with 2-click definition
+                    borderDefiningLines[currentCamera][currentBorder] = null;
+                }
+                
+                // 结束边框定义模式
+                borderDefinitionMode = false;
+                borderDefinitionStep = 0;
+                firstPoint = null;
+                
+                // 清除橡皮筋预览
+                clearRubberBandPreview();
+                
+                // 清除按钮激活状态
+                document.querySelectorAll('.border-def-btn').forEach(btn => btn.classList.remove('active'));
+                
+                updateStatus(`${getBorderName(currentBorder)}定义完成，包含2个点`, 'success');
+                
+                // Check if both Top and Bottom borders are now defined to derive Left/Right
+                const topDefiningLine = borderDefiningLines[currentCamera][0];
+                const bottomDefiningLine = borderDefiningLines[currentCamera][1];
+                if (topDefiningLine && bottomDefiningLine) { // Both Top and Bottom are defined
+                    deriveLeftRightBorders(currentCamera);
+                }
+
+                updateCalibrationDisplay();
+                updateBorderPointsList();
+            }
+        }
+
+        function sortBorderPoints(points, borderIdx) {
+            // 根据边框类型排序点
+            if (borderIdx === 0 || borderIdx === 1) {
+                // 横边（上边框和下边框）：按x坐标排序
+                return points.sort((a, b) => a[0] - b[0]);
+            } else {
+                // 纵边（左边框和右边框）：按y坐标排序
+                return points.sort((a, b) => a[1] - b[1]);
+            }
+        }
+
+        function startRubberBandPreview(startX, startY) {
+            const imageContainer = document.getElementById('calibrationImageContainer');
+            
+            // 创建鼠标移动监听器
+            function handleMouseMove(e) {
+                const rect = imageElement.getBoundingClientRect();
+                const clientX = e.clientX - rect.left;
+                const clientY = e.clientY - rect.top;
+                
+                // 转换坐标
+                const scaleX = imageElement.naturalWidth / imageElement.clientWidth;
+                const scaleY = imageElement.naturalHeight / imageElement.clientHeight;
+                const currentX = clientX * scaleX;
+                const currentY = clientY * scaleY;
+                
+                // 更新橡皮筋线条
+                updateRubberBandLine(startX, startY, currentX, currentY);
+            }
+            
+            imageElement.addEventListener('mousemove', handleMouseMove);
+            
+            // 保存移除函数
+            rubberBandLine = handleMouseMove;
+        }
+
+        function updateRubberBandLine(x1, y1, x2, y2) {
+            // 这里应该在canvas或SVG上绘制橡皮筋线条
+            // 为简化，我们先跳过视觉效果，只在控制台输出
+            // console.log(`Rubber band: (${x1}, ${y1}) to (${x2}, ${y2})`);
+        }
+
+        function clearRubberBandPreview() {
+            if (rubberBandLine && imageElement) {
+                imageElement.removeEventListener('mousemove', rubberBandLine);
+                rubberBandLine = null;
+            }
+        }        function addCalibrationPoint(rawX, rawY) {
+            const borderArray = calibrationData[currentCamera][currentBorder];
+            let definingLine = borderDefiningLines[currentCamera][currentBorder];
+            let pointToAdd = [rawX, rawY];
+            let statusMsg = `已添加点 (${Math.round(rawX)}, ${Math.round(rawY)})`;
+            let statusType = 'success';
+
+            if (definingLine && definingLine.p1 && definingLine.p2) {
+                const p1 = definingLine.p1;
+                const p2 = definingLine.p2;
+                const dx = p2[0] - p1[0];
+                const dy = p2[1] - p1[1];
+
+                if (dx * dx + dy * dy > 0.0001) { // If line is well-defined (p1 and p2 are distinct)
+                    pointToAdd = projectPointOntoLine([rawX, rawY], p1, p2);
+                    statusMsg = `点已吸附到初始边线 (${Math.round(pointToAdd[0])}, ${Math.round(pointToAdd[1])})`;
+                    statusType = 'info';
+                } else {
+                    statusMsg = `初始边线定义不明确 (点相同), 点 (${Math.round(rawX)}, ${Math.round(rawY)}) 未吸附`;
+                    statusType = 'warning';
+                }
+            } else if (borderArray.length === 1) {
+                // This is the 2nd point being added manually to a border (e.g. after clearing it).
+                // It will define the line with the 1st point already in borderArray.
+                // No snapping for this point itself. The defining line will be set after sorting below.
+                statusMsg = `已添加第二个点 (${Math.round(rawX)}, ${Math.round(rawY)}) 定义边线`;
+            } else if (borderArray.length === 0) {
+                // This is the 1st point being added manually to a border. No line yet.
+                 statusMsg = `已添加第一个点 (${Math.round(rawX)}, ${Math.round(rawY)})`;
+            }
+
+            borderArray.push(pointToAdd);
+
+            // Re-sort points on the current border
+            const sortKeyIndex = (currentBorder === 0 || currentBorder === 1) ? 0 : 1; // 0 for X, 1 for Y
+            borderArray.sort((a, b) => a[sortKeyIndex] - b[sortKeyIndex]);
+
+            // If a border was previously undefined (e.g., cleared) and now has 2 points,
+            // these two points (after sorting) become its new defining line.
+            if (!definingLine && borderArray.length >= 2) {
+                borderDefiningLines[currentCamera][currentBorder] = { p1: [...borderArray[0]], p2: [...borderArray[1]] };
+                if (statusType === 'success') { // Append to original success message if no snap occurred
+                     statusMsg += ` (新边线已由这两点定义)`;
+                }
+            } else if (borderArray.length < 2) { // If fewer than 2 points, no defining line
+                 borderDefiningLines[currentCamera][currentBorder] = null;
+            }
+
+            updateStatus(`${statusMsg} 到${getBorderName(currentBorder)}`, statusType);
+            updateCalibrationDisplay();
+            updateBorderPointsList();
+        }          function renderCalibrationPointsOnOverlay(overlayId) {
+            const overlay = document.getElementById(overlayId);
+            if (!overlay || !imageElement) return;
+            
+            // 清除现有显示
+            overlay.innerHTML = '';
+            
+            // 更新覆盖层位置
+            updateOverlayPosition(overlay, imageElement);
+            
+            // 获取图像显示比例 - 不需要转换，直接使用覆盖层坐标
+            const displayScaleX = overlay.clientWidth / imageElement.naturalWidth;
+            const displayScaleY = overlay.clientHeight / imageElement.naturalHeight;
+            
+            // 显示当前相机的所有边框点
+            const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24'];
+            const borderNames = ['top', 'bottom', 'left', 'right'];
+            
+            calibrationData[currentCamera].forEach((border, borderIndex) => {
+                border.forEach((point, pointIndex) => {
+                    const [x, y] = point;
+                    
+                    // 转换为覆盖层内的相对坐标
+                    const displayX = x * displayScaleX;
+                    const displayY = y * displayScaleY;
+                    
+                    // 创建点元素
+                    const pointElement = document.createElement('div');
+                    pointElement.className = 'calibration-point';
+                    pointElement.style.left = `${displayX}px`;
+                    pointElement.style.top = `${displayY}px`;
+                    pointElement.style.background = colors[borderIndex];
+                    pointElement.title = `${getBorderName(borderIndex)} - 点${pointIndex + 1}`;
+                    
+                    // 添加右键删除功能（仅在校准模式下启用）
+                    if (overlayId === 'calibrationOverlay') {
+                        pointElement.addEventListener('contextmenu', (e) => {
+                            e.preventDefault();
+                            removeCalibrationPoint(borderIndex, pointIndex);
+                        });
+                    }
+                    
+                    overlay.appendChild(pointElement);
+                });
+            });
+            
+            // 如果网格预览开启且在校准模式下，更新网格显示
+            if (overlayId === 'calibrationOverlay' && calibrationGridPreviewVisible) {
+            // Ensure canvas exists and is correctly sized before drawing
+            const canvas = getOrCreateCanvas('calibrationImageContainer', CALIBRATION_PREVIEW_CANVAS_ID, imageElement);
+            if (canvas) {                drawGridOnCanvas(canvas, calibrationData[currentCamera], imageElement, {
+                    lineColor: 'rgba(255, 255, 255, 0.7)',
+                    lineWidth: 1,
+                    shadowBlur: 0
+                });
+            } else if (imageElement && imageElement.complete) {
+                // If image is loaded but canvas couldn't be made, perhaps try again
+                // This might indicate an issue with imageElement.naturalWidth being 0
+                // console.warn("Could not get/create canvas for calibration preview update.");
+            }
+        }        }
+        
+        function updateCalibrationDisplay() {
+            renderCalibrationPointsOnOverlay('calibrationOverlay');
+        }function removeCalibrationPoint(borderIndex, pointIndex) {
+            calibrationData[currentCamera][borderIndex].splice(pointIndex, 1);
+
+            // Simply update displays.
+            updateCalibrationDisplay();
+            updateBorderPointsList();
+            updateStatus(`已删除点`, 'warning');
+        }
+
+        function updateBorderPointsList() {
+            const containers = [
+                'topBorderPoints', 'bottomBorderPoints', 
+                'leftBorderPoints', 'rightBorderPoints'
+            ];
+            
+            containers.forEach((containerId, borderIndex) => {
+                const container = document.getElementById(containerId);
+                container.innerHTML = '';                calibrationData[currentCamera][borderIndex].forEach((point, pointIndex) => {
+                    const [x, y] = point;
+                    
+                    const pointItem = document.createElement('div');
+                    pointItem.className = 'point-item';
+                    
+                    // ALWAYS show delete button now for all borders
+                    pointItem.innerHTML = `
+                        <span>点${pointIndex + 1}: (${Math.round(x)}, ${Math.round(y)})</span>
+                        <button class="btn btn-sm btn-outline-danger" onclick="removeCalibrationPoint(${borderIndex}, ${pointIndex})">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    `;
+                    
+                    container.appendChild(pointItem);
+                });
+                
+                if (calibrationData[currentCamera][borderIndex].length === 0) {
+                    container.innerHTML = '<div class="text-muted small">暂无点</div>';
+                }
+            });        }
+
+        // 清除所有数据
+        document.getElementById('clearAll').addEventListener('click', () => {
+            if (confirm('确定要清除所有标定数据吗？此操作不可撤销。')) {
+                for (let i = 0; i < 4; i++) {
+                    calibrationData[i] = [[], [], [], []];
+                    borderDefiningLines[i] = [null, null, null, null]; // Clear all defining lines
+                }
+                updateCalibrationDisplay();
+                updateBorderPointsList();
+                updateStatus('已清除所有标定数据', 'warning');
+            }
+        });
+
+        // 边框定义按钮事件
+        document.querySelectorAll('.border-def-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const borderIdx = parseInt(btn.dataset.border);
+                startBorderDefinition(borderIdx);
+            });
+        });
+
+        // 橡皮擦工具
+        document.getElementById('eraserTool').addEventListener('click', () => {
+            toggleEraserMode();
+        });        function startBorderDefinition(borderIdx) {
+            if (calibrationData[currentCamera][borderIdx].length >= 2) {
+                if (!confirm(`边框${borderIdx}已有${calibrationData[currentCamera][borderIdx].length}个点，是否要重新定义？`)) {
+                    return;
+                }
+                // 清除现有点
+                calibrationData[currentCamera][borderIdx] = [];
+            }
+            
+            borderDefinitionMode = true;
+            borderDefinitionStep = 0;
+            currentBorder = borderIdx;
+            firstPoint = null;
+            eraserMode = false;
+            
+            // 更新界面状态
+            document.querySelectorAll('.border-def-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelector(`[data-border="${borderIdx}"]`).classList.add('active');
+            document.getElementById('eraserTool').classList.remove('active');
+            
+            // 更新边框选择器
+            document.querySelector(`input[name="borderSelect"][value="${borderIdx}"]`).checked = true;
+            
+            updateStatus(`请在图像上点击两个点来定义${getBorderName(borderIdx)}`, 'info');
+        }function toggleEraserMode() {
+            eraserMode = !eraserMode;
+            borderDefinitionMode = false;
+            borderDefinitionStep = 0;
+            firstPoint = null;
+            
+            // 更新界面状态
+            const eraserBtn = document.getElementById('eraserTool');
+            if (eraserMode) {
+                eraserBtn.classList.add('active');
+                document.querySelectorAll('.border-def-btn').forEach(btn => btn.classList.remove('active'));
+                updateStatus('橡皮擦模式：点击标定点来删除', 'warning');
+            } else {
+                eraserBtn.classList.remove('active');
+                updateStatus('已退出橡皮擦模式', 'info');
+            }
+        }
+
+        // 保存标定数据 - 使用文件下载
+        document.getElementById('saveCalibration').addEventListener('click', async () => { // Make the function async
+    try {
+        // 1. VALIDATION (Your existing validation logic)
+        const currentCameraData = calibrationData[currentCamera];
+        const topPoints = currentCameraData[0].length;
+        const bottomPoints = currentCameraData[1].length;
+        const leftPoints = currentCameraData[2].length;
+        const rightPoints = currentCameraData[3].length;
+        
+        let validationErrors = [];
+        
+        if (topPoints < 2 || bottomPoints < 2) {
+            validationErrors.push('上边框和下边框的点数量必须均 >= 2');
+        }
+        if (topPoints !== bottomPoints) {
+            validationErrors.push('上边框和下边框的点数量必须相等');
+        }
+        if (leftPoints < 2 || rightPoints < 2) {
+            validationErrors.push('左边框和右边框的点数量必须均 >= 2');
+        }
+        if (leftPoints !== rightPoints) {
+            validationErrors.push('左边框和右边框的点数量必须相等');
+        }
+        
+        if (validationErrors.length > 0) {
+            const errorMsg = `当前相机${currentCamera + 1}的标定数据不完整：\n` + validationErrors.join('\n');
+            if (!confirm(errorMsg + '\n\n是否仍要保存所有已标定的数据？')) {
+                return;
+            }
+        }
+        
+        // 2. PREPARE DATA (Your existing data preparation)
+        const dataStr = JSON.stringify(calibrationData, null, 2);
+        const dataBlob = new Blob([dataStr], {type: 'application/json'});
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const suggestedName = `calibration_data_${timestamp}.json`;
+
+        // 3. SAVE FILE
+        // Check if the File System Access API is supported
+        if ('showSaveFilePicker' in window) {
+            try {
+                const saveOptions = {
+                    suggestedName: suggestedName,
+                    types: [{
+                        description: 'JSON Files',
+                        accept: { 'application/json': ['.json'] },
+                    }],
+                };
+                
+                // Show the file save dialog
+                const fileHandle = await window.showSaveFilePicker(saveOptions);
+                
+                // Create a writable stream to the file
+                const writableStream = await fileHandle.createWritable();
+                
+                // Write the blob to the file
+                await writableStream.write(dataBlob);
+                
+                // Close the file and write the contents to disk
+                await writableStream.close();
+                
+                updateStatus('标定数据已保存到指定位置。', 'success');
+                
+            } catch (err) {
+                // Handle errors, including user cancellation of the save dialog
+                if (err.name === 'AbortError') {
+                    // This error occurs if the user cancels the file picker
+                    updateStatus('保存操作已取消。', 'warning');
+                } else {
+                    updateStatus(`保存文件失败: ${err.message}`, 'error');
+                    console.error('Error saving file with File System Access API:', err);
+                    // Optional: You could fall back to the old method here too for certain errors
+                }
+            }
+        } else {
+            // FALLBACK: Use the old method (automatic download) for unsupported browsers
+            console.warn('File System Access API not supported, falling back to download link method.');
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(dataBlob);
+            link.download = suggestedName; // Use the same suggested name
+            
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            URL.revokeObjectURL(link.href);
+            
+            updateStatus('标定数据已自动下载 (浏览器不支持选择保存位置)。', 'success');
+        }
+        
+    } catch (error) { // Catches errors from validation or data preparation phase
+        updateStatus(`保存操作准备失败: ${error.message}`, 'error');
+        console.error('Error in saveCalibration process:', error);
+    }
+});
+        
+        
+        
+        // 加载标定数据 - 使用文件选择
+        document.getElementById('loadCalibration').addEventListener('click', () => {
+            // 创建隐藏的文件输入元素
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = '.json,.txt';
+            fileInput.style.display = 'none';
+            
+            fileInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    loadCalibrationFromFile(file);
+                }
+                // 移除临时元素
+                document.body.removeChild(fileInput);
+            });
+            
+            // 添加到DOM并触发点击
+            document.body.appendChild(fileInput);
+            fileInput.click();
+        });
+        
+        document.getElementById('loadCalibrationViz').addEventListener('click', () => {
+            // 创建隐藏的文件输入元素
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = '.json,.txt';
+            fileInput.style.display = 'none';
+            
+            fileInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    loadCalibrationFromFile(file);
+                }
+                // 移除临时元素
+                document.body.removeChild(fileInput);
+            });
+            
+            // 添加到DOM并触发点击
+            document.body.appendChild(fileInput);
+            fileInput.click();
+        });        function loadCalibrationFromFile(file) {
+            showLoading();
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if (!Array.isArray(data) || data.length !== 4) {
+                        throw new Error('无效的标定数据格式：应包含4个相机的数据');
+                    }
+                    for (let i = 0; i < 4; i++) {
+                        if (!Array.isArray(data[i]) || data[i].length !== 4) {
+                            throw new Error(`无效的标定数据格式：相机${i+1}应包含4个边框数据`);
+                        }
+                        // Ensure points are arrays of numbers
+                        for (let j = 0; j < 4; j++) {
+                            if (!Array.isArray(data[i][j])) {
+                                 throw new Error(`相机${i+1}边框${j+1}的数据格式无效`);
+                            }
+                            data[i][j].forEach(point => {
+                                if (!Array.isArray(point) || point.length !== 2 || typeof point[0] !== 'number' || typeof point[1] !== 'number') {
+                                    throw new Error(`相机${i+1}边框${j+1}中的点格式无效`);
+                                }
+                            });
+                        }
+                    }
+                    calibrationData = data;
+
+                    // Re-initialize/populate borderDefiningLines based on loaded data
+                    for (let camIdx = 0; camIdx < 4; camIdx++) {
+                        borderDefiningLines[camIdx] = [null, null, null, null]; // Reset for camera
+                        for (let borderIdx = 0; borderIdx < 4; borderIdx++) {
+                            const points = calibrationData[camIdx][borderIdx];
+                            if (points.length >= 2) {
+                                // Assume points are already sorted correctly in the file,
+                                // or re-sort them here if necessary before picking p1, p2.
+                                // For simplicity, using points at index 0 and 1 as defining points.
+                                borderDefiningLines[camIdx][borderIdx] = { p1: [...points[0]], p2: [...points[1]] };
+                            }
+                        }
+                    }
+
+                    // Attempt to derive L/R if T/B are defined but L/R from file are empty
+                    // This helps if loading an older file format or one where L/R weren't fully specified.
+                    for (let camIdx = 0; camIdx < 4; camIdx++) {
+                        const topDefLine = borderDefiningLines[camIdx][0];
+                        const bottomDefLine = borderDefiningLines[camIdx][1];
+                        const leftDefLine = borderDefiningLines[camIdx][2];
+                        const rightDefLine = borderDefiningLines[camIdx][3];
+
+                        if (topDefLine && bottomDefLine && (!leftDefLine || !rightDefLine)) {
+                            deriveLeftRightBorders(camIdx); // This will set L/R points and their defining lines
+                        }
+                    }
+
+                    updateCalibrationDisplay();
+                    updateBorderPointsList();
+                    updateStatus(`从文件 "${file.name}" 加载标定数据成功`, 'success');
+                } catch (error) {
+                    updateStatus(`加载失败: ${error.message}`, 'error');
+                    console.error('Error loading calibration from file:', error);
+                } finally {
+                    hideLoading();
+                }
+            };
+            
+            reader.onerror = () => {
+                updateStatus('文件读取失败', 'error');
+                hideLoading();
+            };
+            
+            reader.readAsText(file);
+        }// 可视化模式相关函数
+        async function handleVisualizationImageClick(e) {
+            if (calibrationData.every(camera => camera.every(border => border.length === 0))) {
+                updateStatus('请先加载标定数据', 'warning');
+                return;
+            }
+            
+            const rect = e.target.getBoundingClientRect();
+            const img = e.target;
+            
+            // 获取鼠标在图像容器中的坐标
+            const clientX = e.clientX - rect.left;
+            const clientY = e.clientY - rect.top;
+            
+            // 计算图像的实际显示尺寸与原始尺寸的比例
+            const scaleX = img.naturalWidth / img.clientWidth;
+            const scaleY = img.naturalHeight / img.clientHeight;
+            
+            // 转换为图像原始坐标
+            const x = clientX * scaleX;
+            const y = clientY * scaleY;
+            
+            showLoading();
+            
+            try {
+                const response = await fetch('/api/determine_grid_cell', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        camera_idx: currentCamera,
+                        x: x,
+                        y: y,
+                        calibration_data: calibrationData
+                    })
+                });
+                
+                const result = await response.json();
+                
+                // 显示结果
+                displayGridResult(result, x, y);
+                
+            } catch (error) {
+                updateStatus(`网格判定失败: ${error.message}`, 'error');
+                console.error('Error determining grid cell:', error);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        function displayGridResult(result, x, y) {
+            const resultDisplay = document.getElementById('resultDisplay');
+            const resultContent = document.getElementById('resultContent');
+            
+            resultDisplay.classList.remove('hidden');
+              if (result.success) {
+                const [i, j] = result.grid_cell;
+                resultContent.innerHTML = `
+                    <div><strong>点击坐标:</strong> (${Math.round(x)}, ${Math.round(y)})</div>
+                    <div><strong>相机:</strong> ${currentCamera + 1}</div>
+                    <div><strong>网格单元:</strong> [${i}, ${j}]</div>
+                    <div><strong>横向范围:</strong> ${i} - ${i + 1}</div>
+                    <div><strong>纵向范围:</strong> ${j} - ${j + 1}</div>
+                    <div class="text-success mt-2"><i class="fas fa-check"></i> ${result.message}</div>
+                `;
+                highlightGridCell(i, j);
+                updateStatus(result.message, 'success');
+            } else {
+                resultContent.innerHTML = `
+                    <div><strong>点击坐标:</strong> (${Math.round(x)}, ${Math.round(y)})</div>
+                    <div><strong>相机:</strong> ${currentCamera + 1}</div>
+                    <div class="text-warning mt-2"><i class="fas fa-exclamation-triangle"></i> ${result.message}</div>                `;
+                clearHighlight();
+                updateStatus(result.message, 'warning');
+            }        }
+
+
+        const VISUALIZATION_DISPLAY_CANVAS_ID = 'visualizationDisplayCanvas';
+        const HIGHLIGHT_CANVAS_ID = 'highlightCanvas';        function highlightGridCell(i, j) {
+            if (!imageElement) return;
+            
+            const currentCameraData = calibrationData[currentCamera];
+            const topPoints = currentCameraData[0];
+            const bottomPoints = currentCameraData[1];
+            const leftPoints = currentCameraData[2];
+            const rightPoints = currentCameraData[3];
+            
+            if (topPoints.length < 2 || bottomPoints.length < 2 || 
+                leftPoints.length < 2 || rightPoints.length < 2) return;
+            
+            // 检查网格索引是否有效
+            if (i < 0 || i >= topPoints.length - 1 || j < 0 || j >= leftPoints.length - 1) return;
+            
+            const canvas = getOrCreateCanvas('visualizationImageContainer', HIGHLIGHT_CANVAS_ID, imageElement);
+            if (!canvas) return;
+            
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            const scaleX = canvas.width / imageElement.naturalWidth;
+            const scaleY = canvas.height / imageElement.naturalHeight;
+            
+            // 首先绘制构成该网格单元的四条网格线（高亮显示）
+            ctx.strokeStyle = 'rgba(0, 255, 0, 0.65)';
+            ctx.lineWidth = 4;
+            
+            // 绘制左边界线（横向线i）
+            ctx.beginPath();
+            ctx.moveTo(topPoints[i][0] * scaleX, topPoints[i][1] * scaleY);
+            ctx.lineTo(bottomPoints[i][0] * scaleX, bottomPoints[i][1] * scaleY);
+            ctx.stroke();
+            
+            // 绘制右边界线（横向线i+1）
+            ctx.beginPath();
+            ctx.moveTo(topPoints[i+1][0] * scaleX, topPoints[i+1][1] * scaleY);
+            ctx.lineTo(bottomPoints[i+1][0] * scaleX, bottomPoints[i+1][1] * scaleY);
+            ctx.stroke();
+            
+            // 绘制上边界线（纵向线j）
+            ctx.beginPath();
+            ctx.moveTo(leftPoints[j][0] * scaleX, leftPoints[j][1] * scaleY);
+            ctx.lineTo(rightPoints[j][0] * scaleX, rightPoints[j][1] * scaleY);
+            ctx.stroke();
+            
+            // 绘制下边界线（纵向线j+1）
+            ctx.beginPath();
+            ctx.moveTo(leftPoints[j+1][0] * scaleX, leftPoints[j+1][1] * scaleY);
+            ctx.lineTo(rightPoints[j+1][0] * scaleX, rightPoints[j+1][1] * scaleY);
+            ctx.stroke();
+            
+            // 然后计算网格单元的四个角点并绘制填充区域
+            // 网格单元 [i,j] 的四个角点是由周围的网格线交点确定的
+            
+            // 左上角：横向线i与纵向线j的交点
+            const topLeft = getGridLineIntersection(
+                topPoints[i], bottomPoints[i],    // 横向线i
+                leftPoints[j], rightPoints[j]     // 纵向线j
+            );
+            
+            // 右上角：横向线i+1与纵向线j的交点
+            const topRight = getGridLineIntersection(
+                topPoints[i+1], bottomPoints[i+1], // 横向线i+1
+                leftPoints[j], rightPoints[j]      // 纵向线j
+            );
+            
+            // 左下角：横向线i与纵向线j+1的交点
+            const bottomLeft = getGridLineIntersection(
+                topPoints[i], bottomPoints[i],      // 横向线i
+                leftPoints[j+1], rightPoints[j+1]   // 纵向线j+1
+            );
+            
+            // 右下角：横向线i+1与纵向线j+1的交点
+            const bottomRight = getGridLineIntersection(
+                topPoints[i+1], bottomPoints[i+1],  // 横向线i+1
+                leftPoints[j+1], rightPoints[j+1]   // 纵向线j+1
+            );
+            
+            // 绘制绿色半透明填充区域
+            ctx.fillStyle = 'rgba(0, 255, 0, 0.58)';
+            ctx.beginPath();
+            ctx.moveTo(topLeft[0] * scaleX, topLeft[1] * scaleY);
+            ctx.lineTo(topRight[0] * scaleX, topRight[1] * scaleY);
+            ctx.lineTo(bottomRight[0] * scaleX, bottomRight[1] * scaleY);
+            ctx.lineTo(bottomLeft[0] * scaleX, bottomLeft[1] * scaleY);
+            ctx.closePath();
+            ctx.fill();
+            
+            canvas.style.zIndex = '20';
+        }
+
+        function getGridLineIntersection(hLineP1, hLineP2, vLineP1, vLineP2) {
+            // 计算两条线段的交点
+            // hLine: 横向网格线 (从 hLineP1 到 hLineP2)
+            // vLine: 纵向网格线 (从 vLineP1 到 vLineP2)
+            
+            const x1 = hLineP1[0], y1 = hLineP1[1];
+            const x2 = hLineP2[0], y2 = hLineP2[1];
+            const x3 = vLineP1[0], y3 = vLineP1[1];
+            const x4 = vLineP2[0], y4 = vLineP2[1];
+            
+            const denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+            
+            if (Math.abs(denom) < 1e-10) {
+                // 线段平行或重合，返回第一条线的中点
+                return [(x1 + x2) / 2, (y1 + y2) / 2];
+            }
+            
+            const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom;
+            
+            const intersectionX = x1 + t * (x2 - x1);
+            const intersectionY = y1 + t * (y2 - y1);
+            
+            return [intersectionX, intersectionY];
+        }
+
+        function clearHighlight() {
+            removeCanvas(HIGHLIGHT_CANVAS_ID);
+        }
+
+        function showVisualizationDisplayGrid() {
+                    console.log("Attempting to show visualization grid for camera:", currentCamera);
+            if (calibrationData && calibrationData[currentCamera]) {
+                console.log("Top points:", calibrationData[currentCamera][0].length, JSON.parse(JSON.stringify(calibrationData[currentCamera][0])));
+                console.log("Bottom points:", calibrationData[currentCamera][1].length, JSON.parse(JSON.stringify(calibrationData[currentCamera][1])));
+                console.log("Left points:", calibrationData[currentCamera][2].length, JSON.parse(JSON.stringify(calibrationData[currentCamera][2])));
+                console.log("Right points:", calibrationData[currentCamera][3].length, JSON.parse(JSON.stringify(calibrationData[currentCamera][3])));
+            } else {
+                console.log("No calibration data for current camera:", currentCamera);
+            }
+            if (!imageElement) {
+                updateStatus('请先加载图像以显示网格', 'warning');
+                return;
+            }
+            
+            // Check if calibrationData for the current camera is populated
+            if (!calibrationData || !calibrationData[currentCamera] ||
+                calibrationData[currentCamera].every(border => border.length === 0)) {
+                updateStatus('请先加载有效的标定数据', 'warning');
+                return;
+            }
+            
+            const currentCameraData = calibrationData[currentCamera];
+            const topPoints = currentCameraData[0];
+            const bottomPoints = currentCameraData[1];
+            const leftPoints = currentCameraData[2];
+            const rightPoints = currentCameraData[3];
+
+            if (topPoints.length < 2 || bottomPoints.length < 2 || 
+                leftPoints.length < 2 || rightPoints.length < 2) {
+                updateStatus('网格显示需要每个边框至少有2个点', 'warning');
+                return;
+            }
+            if (topPoints.length !== bottomPoints.length || leftPoints.length !== rightPoints.length) {
+                updateStatus('显示网格要求对应边框的点数量必须相等', 'warning');
+                return;
+            }
+            
+            const canvas = getOrCreateCanvas('visualizationImageContainer', VISUALIZATION_DISPLAY_CANVAS_ID, imageElement);
+            if (canvas) {                drawGridOnCanvas(canvas, currentCameraData, imageElement, {
+                    lineColor: 'rgba(255, 255, 0, 0.8)', // Yellow, slightly transparent
+                    lineWidth: 2,
+                    shadowColor: 'rgba(0,0,0,0.3)',
+                    shadowBlur: 2
+                });
+                updateStatus(`已显示网格 (${topPoints.length -1}x${leftPoints.length-1} cells)`, 'success');
+            }
+        }
+
+        function hideVisualizationDisplayGrid() {
+            removeCanvas(VISUALIZATION_DISPLAY_CANVAS_ID);
+            updateStatus('已隐藏网格', 'success');
+        }   
+    
+
+        
+
+        // 显示/隐藏网格
+        document.getElementById('showGrid').addEventListener('click', showVisualizationDisplayGrid);     
+        
+        document.getElementById('hideGrid').addEventListener('click', hideVisualizationDisplayGrid);        document.getElementById('clearVizResults').addEventListener('click', () => {
+            document.getElementById('resultDisplay').classList.add('hidden');
+            clearHighlight();
+            updateStatus('已清除可视化结果', 'success');
+        });
+
+        // 导出数据
+        document.getElementById('exportCalibration').addEventListener('click', () => {
+            const dataStr = JSON.stringify(calibrationData, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `calibration_data_${new Date().toISOString().slice(0, 10)}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            
+            URL.revokeObjectURL(url);
+            updateStatus('标定数据已导出', 'success');
+        });        // 预览网格
+        document.getElementById('previewGrid').addEventListener('click', toggleCalibrationGridPreview);
+
+        
+        const CALIBRATION_PREVIEW_CANVAS_ID = 'calibrationPreviewCanvas';
+
+        function toggleCalibrationGridPreview() {
+            calibrationGridPreviewVisible = !calibrationGridPreviewVisible;
+            const btn = document.getElementById('previewGrid');
+            
+            if (calibrationGridPreviewVisible) {
+                btn.classList.add('active'); // Keep existing active class styling
+                btn.innerHTML = '<i class="fas fa-eye-slash"></i> 隐藏网格';
+                showCalibrationGridPreview();
+            } else {
+                btn.classList.remove('active');
+                btn.innerHTML = '<i class="fas fa-grid-3x3"></i> 预览网格';
+                hideCalibrationGridPreview();
+            }
+        }
+
+        function showCalibrationGridPreview() {
+            if (!imageElement) {
+                updateStatus('请先加载图像以预览网格', 'warning');
+                return;
+            }
+            
+            const currentCameraData = calibrationData[currentCamera];
+            const topPoints = currentCameraData[0];
+            const bottomPoints = currentCameraData[1];
+            const leftPoints = currentCameraData[2];
+            const rightPoints = currentCameraData[3];
+            
+            if (topPoints.length < 2 || bottomPoints.length < 2 || 
+                leftPoints.length < 2 || rightPoints.length < 2) {
+                updateStatus('网格预览需要每个边框至少有2个点', 'warning');
+                calibrationGridPreviewVisible = false; // Reset if cannot show
+                toggleCalibrationGridPreview(); // Update button state
+                return;
+            }
+            if (topPoints.length !== bottomPoints.length || leftPoints.length !== rightPoints.length) {
+                updateStatus('预览网格要求对应边框的点数量必须相等', 'warning');
+                calibrationGridPreviewVisible = false; // Reset
+                toggleCalibrationGridPreview(); // Update button state
+                return;
+            }
+            
+            const canvas = getOrCreateCanvas('calibrationImageContainer', CALIBRATION_PREVIEW_CANVAS_ID, imageElement);
+            if (canvas) {                drawGridOnCanvas(canvas, currentCameraData, imageElement, {
+                    lineColor: 'rgba(255, 255, 255, 0.7)', // White, slightly transparent
+                    lineWidth: 1,
+                    shadowBlur: 0 // No shadow for preview
+                });
+                updateStatus(`已显示网格预览`, 'success');
+            }
+        }
+
+         function hideCalibrationGridPreview() {
+            removeCanvas(CALIBRATION_PREVIEW_CANVAS_ID);
+            // Only update status if it wasn't already set by a failure in showCalibrationGridPreview
+            if (calibrationGridPreviewVisible === false && document.getElementById('previewGrid').classList.contains('active')) {
+                 // This case should not happen if toggle is correct
+            } else if (!calibrationGridPreviewVisible) {
+                 updateStatus('已隐藏网格预览', 'info');
+            }
+        }
+
+            
+
+           function createGridOverlay() {
+            // 移除现有的canvas
+            removeGridOverlay();
+            
+            const container = document.getElementById('calibrationImageContainer');
+            const canvas = document.createElement('canvas');
+            canvas.id = 'calibrationPreviewGridCanvas';
+            canvas.style.position = 'absolute';
+            canvas.style.pointerEvents = 'none';
+            canvas.style.zIndex = '10';
+            
+            // 获取图像的实际显示位置和尺寸
+            const imgRect = imageElement.getBoundingClientRect();
+            const containerRect = container.getBoundingClientRect();
+            
+            canvas.style.left = (imgRect.left - containerRect.left) + 'px';
+            canvas.style.top = (imgRect.top - containerRect.top) + 'px';
+            canvas.width = imageElement.clientWidth;
+            canvas.height = imageElement.clientHeight;
+            canvas.style.width = imageElement.clientWidth + 'px';
+            canvas.style.height = imageElement.clientHeight + 'px';
+            
+            container.appendChild(canvas);
+        }
+
+        function removeGridOverlay() {
+            const existing = document.getElementById('calibrationPreviewGridCanvas');
+            if (existing) {
+                existing.remove();
+            }
+        }
+
+        function drawGridLines() {
+            const canvas = document.getElementById('calibrationPreviewGridCanvas');
+            if (!canvas) return;
+            
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            const currentCameraData = calibrationData[currentCamera];
+            const topPoints = currentCameraData[0];
+            const bottomPoints = currentCameraData[1];
+            const leftPoints = currentCameraData[2];
+            const rightPoints = currentCameraData[3];
+            
+            // 计算坐标转换比例
+            const scaleX = canvas.width / imageElement.naturalWidth;
+            const scaleY = canvas.height / imageElement.naturalHeight;
+            
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 1;
+            
+            // 绘制横向网格线（连接上下边框对应点）
+            if (topPoints.length === bottomPoints.length && topPoints.length >= 2) {
+                for (let i = 0; i < topPoints.length; i++) {
+                    const topPoint = topPoints[i];
+                    const bottomPoint = bottomPoints[i];
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(topPoint[0] * scaleX, topPoint[1] * scaleY);
+                    ctx.lineTo(bottomPoint[0] * scaleX, bottomPoint[1] * scaleY);
+                    ctx.stroke();
+                }
+            }
+            
+            // 绘制纵向网格线（连接左右边框对应点）
+            if (leftPoints.length === rightPoints.length && leftPoints.length >= 2) {
+                for (let i = 0; i < leftPoints.length; i++) {
+                    const leftPoint = leftPoints[i];
+                    const rightPoint = rightPoints[i];
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(leftPoint[0] * scaleX, leftPoint[1] * scaleY);
+                    ctx.lineTo(rightPoint[0] * scaleX, rightPoint[1] * scaleY);
+                    ctx.stroke();
+                }
+            }
+        }
+
+        // 初始化页面
+        window.addEventListener('load', () => {
+            switchMode('calibration');
+            updateBorderPointsList();
+        });
+    </script>
+</body>
+</html>

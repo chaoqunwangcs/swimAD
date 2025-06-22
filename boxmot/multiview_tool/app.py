@@ -28,6 +28,7 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 # 全局变量存储会话数据
 session_data = {
     'calibration_data': None,
+    'anti_distortion_params': None,  # 存储反畸变参数
     'current_camera': 0,
     'images': {}  # 存储上传的图像
 }
@@ -39,6 +40,102 @@ def index():
     return render_template('index2.html')
 
 
+@app.route('/api/upload_anti_distortion_params', methods=['POST'])
+def upload_anti_distortion_params():
+    """
+    反畸变参数上传API端点
+    
+    接收:
+    - anti_distortion_file: JSON文件包含反畸变参数
+    
+    返回:
+    - success: 布尔值
+    - message: 操作消息
+    """
+    try:
+        if 'anti_distortion_file' not in request.files:
+            return jsonify({
+                'success': False,
+                'message': '没有接收到反畸变参数文件'
+            }), 400
+        
+        file = request.files['anti_distortion_file']
+        if file.filename == '':
+            return jsonify({
+                'success': False,
+                'message': '文件名为空'
+            }), 400
+        
+        # 读取并解析JSON文件
+        file_content = file.read().decode('utf-8')
+        anti_distortion_params = json.loads(file_content)
+        
+        # 验证参数格式
+        if not validate_anti_distortion_params(anti_distortion_params):
+            return jsonify({
+                'success': False,
+                'message': '反畸变参数文件格式错误'
+            }), 400
+        
+        # 存储到会话数据
+        session_data['anti_distortion_params'] = anti_distortion_params
+        
+        return jsonify({
+            'success': True,
+            'message': '反畸变参数上传成功'
+        })
+    
+    except json.JSONDecodeError:
+        return jsonify({
+            'success': False,
+            'message': 'JSON文件格式错误'
+        }), 400
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'处理错误: {str(e)}'
+        }), 500
+
+
+def validate_anti_distortion_params(params):
+    """
+    验证反畸变参数格式
+    
+    参数:
+    - params: 待验证的参数字典
+    
+    返回:
+    - bool: 验证结果
+    """
+    required_views = ['view1', 'view2', 'view3', 'view4']
+    required_keys = ['p1', 'p2', 'k1', 'k2', 'k3', 'fx_ratio', 'fy_ratio']
+    
+    for view in required_views:
+        if view not in params:
+            return False
+        for key in required_keys:
+            if key not in params[view] or not isinstance(params[view][key], (int, float)):
+                return False
+    return True
+
+
+def get_anti_distortion_params_for_view(view_index):
+    """
+    根据view索引获取对应的反畸变参数
+    
+    参数:
+    - view_index: 相机索引 (0-3)
+    
+    返回:
+    - dict: 对应view的反畸变参数，如果没有则返回None
+    """
+    if session_data['anti_distortion_params'] is None:
+        return None
+    
+    view_name = f'view{view_index + 1}'  # 0->view1, 1->view2, etc.
+    return session_data['anti_distortion_params'].get(view_name)
+
+
 @app.route('/api/undistort_image', methods=['POST'])
 def undistort_image():
     """
@@ -46,13 +143,28 @@ def undistort_image():
     
     接收:
     - image: base64编码的图像数据或文件上传
+    - camera_idx: 相机索引 (0-3, 可选)
     
     返回:
     - success: 布尔值
-    - message: 操作消息
-    - undistorted_image: base64编码的反畸变图像（如果成功）
+    - message: 操作消息    - undistorted_image: base64编码的反畸变图像（如果成功）
     """
     try:
+        # 获取相机索引 - 安全地处理不同的请求格式
+        camera_idx = 0  # 默认值
+        
+        # 优先从form数据获取
+        if request.form.get('camera_idx'):
+            camera_idx = int(request.form.get('camera_idx', 0))
+        # 如果是JSON请求，从JSON获取
+        elif request.is_json and request.json and 'camera_idx' in request.json:
+            camera_idx = int(request.json.get('camera_idx', 0))
+          # 获取对应相机的反畸变参数
+        anti_distortion_params = get_anti_distortion_params_for_view(camera_idx)
+        
+        # 调试信息：记录使用的相机索引和参数来源
+        print(f"Debug: camera_idx={camera_idx}, using {'uploaded' if anti_distortion_params else 'default'} params")
+        
         # 检查请求中是否有图像数据
         image_data = None
         
@@ -61,7 +173,7 @@ def undistort_image():
             file = request.files['image']
             if file.filename != '':
                 image_data = file.read()
-        elif 'image_base64' in request.json:
+        elif request.is_json and request.json and 'image_base64' in request.json:
             # base64方式
             base64_str = request.json['image_base64']
             if base64_str.startswith('data:image/'):
@@ -79,23 +191,34 @@ def undistort_image():
                 'success': False,
                 'message': '图像数据为空'
             }), 400
-        
-        # 调用反畸变处理
-        undistorted_data = process_image_bytes(image_data)
+          # 调用反畸变处理，传递反畸变参数
+        if anti_distortion_params:
+            undistorted_data = process_image_bytes(image_data, anti_distortion_params)
+        else:
+            # 如果没有参数，使用默认参数（与anti_distortion.py中的默认参数一致）
+            default_params = {
+                'p1': 0,
+                'p2': 0, 
+                'k1': -0.5353,
+                'k2': 0.2875,
+                'k3': -0.0906,
+                'fx_ratio': 1.33,
+                'fy_ratio': 1.33
+            }
+            undistorted_data = process_image_bytes(image_data, default_params)
         
         if undistorted_data is None:
             return jsonify({
                 'success': False,
                 'message': '图像反畸变处理失败'
             }), 500
-        
-        # 将处理后的图像转换为base64
+          # 将处理后的图像转换为base64
         undistorted_base64 = base64.b64encode(undistorted_data).decode('utf-8')
         
         return jsonify({
             'success': True,
             'message': '图像反畸变处理成功',
-            'undistorted_image': f'data:image/jpeg;base64,{undistorted_base64}'
+            'undistorted_image': f'data:image/png;base64,{undistorted_base64}'
         })
     
     except Exception as e:
@@ -333,11 +456,13 @@ def session_info():
     
     返回:
     - has_calibration_data: 是否有标定数据
+    - has_anti_distortion_params: 是否有反畸变参数
     - current_camera: 当前相机索引
     - images_count: 上传的图像数量
     """
     return jsonify({
         'has_calibration_data': session_data['calibration_data'] is not None,
+        'has_anti_distortion_params': session_data['anti_distortion_params'] is not None,
         'current_camera': session_data['current_camera'],
         'images_count': len(session_data['images']),
         'calibration_file_exists': os.path.exists(CALIBRATION_FILE)

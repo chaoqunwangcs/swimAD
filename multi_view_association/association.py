@@ -116,8 +116,8 @@ class Point(object):
             None, update the Point information
         '''
         assert self.is_distorted == point.is_distorted
-        new_x = (self.x + point.x * weight[0]) / 2.0
-        new_y = (self.y + point.y * weight[1]) / 2.0
+        new_x = (self.x + point.x * weight[0]) / (1 + weight[0])
+        new_y = (self.y + point.y * weight[1]) / (1 + weight[1])
         return Point(new_x, new_y, self.view, self.is_distorted)
 
 
@@ -260,7 +260,7 @@ class LabelData(object):
     def update(self, object):
         '''
         input:
-            (id, x1, y1, x2, y2)
+            (id, x, y, w, h)
         output: 
             None
         '''
@@ -363,7 +363,7 @@ class ViewAssociation(object):
             None, init necessary parameters
         '''
         # pdb.set_trace()
-        assert point.view == self.view2
+        assert point.view.name == self.view2.name
         point_homogeneous = np.array([point.x, point.y, 1])
         projected_point_homogeneous = self.homography_matrix @ point_homogeneous
         projected_point = projected_point_homogeneous[:2] / projected_point_homogeneous[2]
@@ -398,8 +398,6 @@ class MultiViewAssociation(object):
 
         return views
 
-
-    
     def init_view_association(self):
         '''
         func:
@@ -520,12 +518,19 @@ class MultiViewAssociation(object):
             anti_distorted_image.draw_image(view.anti_distortion(image), view_position[view.name])
             anti_distorted_image.draw_str(f"view:{view.name}", view_position[view.name])
 
+            anti_distorted_image.set_full_image()
+
         for (obj_idxs, points, grids, _, views ) in data:
+            anti_distorted_image.clear_image()
             # draw object center point on the original image
             for view_idx, view in enumerate(views):
                 original_image.draw_circle((points[view_idx].original_x, points[view_idx].original_y), view_position[view.name], (255,0,0), str(obj_idxs[view_idx]))
                 anti_distorted_image.draw_circle((points[view_idx].x, points[view_idx].y), view_position[view.name], (255,0,0), str(obj_idxs[view_idx]))
-            
+                if view != self.main_view:
+                    # pdb.set_trace()
+                    project_point = points[view_idx].projection(self.main_view, self.views_projections)
+                    anti_distorted_image.draw_circle((project_point.x, project_point.y), view_position[MAIN_VIEW], (0,255,0), str(obj_idxs[view_idx]))
+                
             original_image.save_image()
             anti_distorted_image.save_image()
             pdb.set_trace()
@@ -556,7 +561,13 @@ class Drawer(object):
         self.w, self.h = w, h 
         self.path = path
         self.image = np.zeros((2 * h, 2 * w, 3), dtype=np.uint8)
-    
+        
+    def set_full_image(self):
+        self.full_image = copy.deepcopy(self.image)
+
+    def clear_image(self):
+        self.image = copy.deepcopy(self.full_image)
+
     def draw_image(self, image, position=(0,0)):    # position = (x,y)
         self.image[position[1]*self.h:(position[1]+1)*self.h, position[0]*self.w:(position[0]+1)*self.w] = image
     
@@ -609,7 +620,7 @@ class AssociationData(object):
         self.views.append(view)
 
         for label in image_data.labels.objects:
-            object_id, cx, cy = label[0], label[1], label[2]
+            object_id, cx, cy = label[0], label[1] + label[3]/2.0, label[2] + label[4]/2.0
             point = Point(cx, cy, view)
             grid = point.grid
             self.association_data[view.name].append(([object_id], point, grid))
@@ -663,8 +674,8 @@ class AssociationData(object):
 
         # hungarian_match
         cost_matrix = np.zeros((len(main_view_grid), len(associate_view_grid)))
-        for i, grid_idx1 in enumerate(main_view_point):
-            for j, grid_idx2 in enumerate(associate_view_point_projection):
+        for i, grid_idx1 in enumerate(main_view_grid):  #main_view_point
+            for j, grid_idx2 in enumerate(associate_view_grid_projection):  #associate_view_point
                 cost_matrix[i, j] = math.sqrt((grid_idx1.x - grid_idx2.x)**2 + (grid_idx1.y - grid_idx2.y)**2)
         
         # pdb.set_trace()

@@ -33,7 +33,7 @@ dataset/
 ### 数据可视化
 
 ```
-python data_process/data_visualization.py --input_version dataset_v20250506 --label_format labelme[labelme/coco/txt/mot]
+python data_preprocess/data_visualization.py --input_version dataset_v20250506 --label_format labelme[labelme/coco/txt/mot]
 ```
 
 ### 数据预处理

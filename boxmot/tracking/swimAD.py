@@ -107,10 +107,12 @@ def run(args):
 
     if args.imgsz is None:
         args.imgsz = default_imgsz(args.yolo_model)
-    yolo = YOLO(
-        args.yolo_model if is_ultralytics_model(args.yolo_model)
-        else 'yolov8n.pt',
-    )
+    pdb.set_trace()
+    # yolo = YOLO(
+    #     args.yolo_model if is_ultralytics_model(args.yolo_model)
+    #     else 'yolov8n.pt',
+    # )
+    yolo = YOLO(args.yolo_model)
 
     results = yolo.track(
         source=args.source,
@@ -136,22 +138,22 @@ def run(args):
 
     yolo.add_callback('on_predict_start', partial(on_predict_start, persist=True))
 
-    if not is_ultralytics_model(args.yolo_model):
-        m = get_yolo_inferer(args.yolo_model)
-        yolo_model = m(model=args.yolo_model, device=yolo.predictor.device,
-                       args=yolo.predictor.args)
-        yolo.predictor.model = yolo_model
+    # if not is_ultralytics_model(args.yolo_model):
+    #     m = get_yolo_inferer(args.yolo_model)
+    #     yolo_model = m(model=args.yolo_model, device=yolo.predictor.device,
+    #                    args=yolo.predictor.args)
+    #     yolo.predictor.model = yolo_model
 
-        if not is_ultralytics_model(args.yolo_model):
-            yolo.add_callback(
-                "on_predict_batch_start",
-                lambda p: yolo_model.update_im_paths(p)
-            )
-            yolo.predictor.preprocess = (
-                lambda imgs: yolo_model.preprocess(im=imgs))
-            yolo.predictor.postprocess = (
-                lambda preds, im, im0s:
-                yolo_model.postprocess(preds=preds, im=im, im0s=im0s))
+    #     if not is_ultralytics_model(args.yolo_model):
+    #         yolo.add_callback(
+    #             "on_predict_batch_start",
+    #             lambda p: yolo_model.update_im_paths(p)
+    #         )
+    #         yolo.predictor.preprocess = (
+    #             lambda imgs: yolo_model.preprocess(im=imgs))
+    #         yolo.predictor.postprocess = (
+    #             lambda preds, im, im0s:
+    #             yolo_model.postprocess(preds=preds, im=im, im0s=im0s))
 
     yolo.predictor.custom_args = args
 
@@ -189,6 +191,7 @@ def run(args):
                         class_label = cls_list[-1] if len(cls_list) > 0 else None
                         # 保证所有指标都写入
                         bbox = rule_info.get("bbox")
+                        # pdb.set_trace()
                         json_data["frame_data"][frame_key][obj_key] = {
                             "class_label": class_label,
                             "min_dist": rule_info.get("min_dist"),

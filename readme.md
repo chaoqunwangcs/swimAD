@@ -77,6 +77,7 @@
         python -m tracking.track_v0702 --source ../dataset/dataset_v20250506/afternoon --yolo-model /home/chaoqunwang/swimAD/yolo_train/runs/detect/yolov11l_swimAD_v0604_shuffle_bs64_e250_op_auto/weights/best.pt --tracking-method ocsort --save-video --device 1 --save --save-video --show-trajectories
         ```
         遗留问题：box投影时，会发生畸变，导师box长度或者宽度异常，需要重新设计box投影
+        
         2. -[ ] 评测
        
            文件格式要求:

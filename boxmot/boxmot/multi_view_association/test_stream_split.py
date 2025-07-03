@@ -398,17 +398,31 @@ class ViewAssociation(object):
         point_homogeneous1 = np.array([box.x1, box.y1, 1])
         projected_point_homogeneous1 = self.homography_matrix @ point_homogeneous1
         projected_point1 = projected_point_homogeneous1[:2] / projected_point_homogeneous1[2]
-
         point_homogeneous2 = np.array([box.x2, box.y2, 1])
         projected_point_homogeneous2 = self.homography_matrix @ point_homogeneous2
         projected_point2 = projected_point_homogeneous2[:2] / projected_point_homogeneous2[2]
+        new_w1, new_h1 = abs(projected_point2[0]-projected_point1[0])/2.0, abs(projected_point2[1]-projected_point1[1])/2.0
+
+        point_homogeneous1 = np.array([box.x2, box.y1, 1])
+        projected_point_homogeneous1 = self.homography_matrix @ point_homogeneous1
+        projected_point1 = projected_point_homogeneous1[:2] / projected_point_homogeneous1[2]
+        point_homogeneous2 = np.array([box.x1, box.y2, 1])
+        projected_point_homogeneous2 = self.homography_matrix @ point_homogeneous2
+        projected_point2 = projected_point_homogeneous2[:2] / projected_point_homogeneous2[2]
+        new_w2, new_h2 = abs(projected_point2[0]-projected_point1[0])/2.0, abs(projected_point2[1]-projected_point1[1])/2.0
+
+        if new_w1 * new_h1 >= new_w2 * new_h2:
+            new_w, new_h = new_w1, new_h1
+        else:
+            new_w, new_h = new_w2, new_h2
 
         point_homogeneousc = np.array([box.cx, box.cy, 1])
         projected_point_homogeneousc = self.homography_matrix @ point_homogeneousc
         projected_pointc = projected_point_homogeneousc[:2] / projected_point_homogeneousc[2]
-
-        new_w, new_h = abs(projected_point2[0]-projected_point1[0])/2.0, abs(projected_point2[1]-projected_point1[1])/2.0
         new_cx, new_cy = projected_pointc[0], projected_pointc[1]
+
+        
+        
         new_x1, new_y1, new_x2, new_y2 = new_cx-new_w, new_cy-new_h, new_cx+new_w, new_cy+new_h
         
         return Box(new_x1, new_y1, new_x2, new_y2, box.conf, box.cls_id, self.target_view, box.source_view, box.image_path, is_distorted=box.is_distorted)

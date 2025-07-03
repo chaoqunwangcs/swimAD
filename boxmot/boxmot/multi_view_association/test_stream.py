@@ -8,11 +8,12 @@ import copy
 from scipy.optimize import linear_sum_assignment
 from boxmot.multiview_tool.grid_determine import find_position_between_lines
 import random 
+random.seed(42)
 
 
 import pdb
 
-MAIN_VIEW = '1'
+MAIN_VIEW = 'MAIN'
 
 def point_to_line_distance(point, line):
     """
@@ -34,9 +35,76 @@ def point_to_line_distance(point, line):
 
     return distance
 
+class Box(object):
+    def __init__(self, x1, y1, x2, y2, conf, cls_id, view, is_distorted=True):
+        self.x, self.y = (x1 + x2)/2.0, (y1 + y2)/2.0
+        self.x1, self.y1, self.x2, self.y2 = x1, y1, x2, y2
+        self.conf = conf
+        self.cls_id = cls_id
+        self.view = view
+        self.is_distorted = is_distorted
+        self.grid = self.get_grid()
+    
+    def update(self, box, weight=(1.0,1.0,1.0,1.0,1.0,1.0)):
+        '''
+        func:
+            update the object location with given Point and weight provided by the Point.view
+        input:
+            point: Point object
+        output:
+            None, update the Point information
+        '''
+        assert self.is_distorted == box.is_distorted
+        new_x1 = (self.x1 + box.x1 * weight[0]) / (1 + weight[0])
+        new_y1 = (self.y1 + box.y1 * weight[1]) / (1 + weight[1])
+        new_x2 = (self.x2 + box.x2 * weight[2]) / (1 + weight[2])
+        new_y2 = (self.y2 + box.y2 * weight[3]) / (1 + weight[3])
+        new_conf = (self.conf + box.conf * weight[4]) / (1 + weight[4])
+        new_cls_id = (self.cls_id + box.cls_id*weight[5]) / (1 + weight[5])
+        return Box(new_x1, new_y1, new_x2, new_y2, new_conf, new_cls_id, self.view, is_distorted=self.is_distorted)
+
+    def get_grid(self):
+        if self.is_distorted:
+            self.anti_distortion()
+
+        col = find_position_between_lines(self.x, self.y, self.view.vertical_lines, is_vertical=True)
+        row = find_position_between_lines(self.x, self.y, self.view.horizontal_lines, is_vertical=False)
+        if col is None:
+            # pdb.set_trace()
+            col = 0 if point_to_line_distance((self.x, self.y), self.view.vertical_lines[0]) < point_to_line_distance((self.x, self.y), self.view.vertical_lines[-1]) else self.view.vertical_num - 2
+        if row is None:
+            # pdb.set_trace()
+            row = 0 if point_to_line_distance((self.x, self.y), self.view.horizontal_lines[0]) < point_to_line_distance((self.x, self.y), self.view.horizontal_lines[-1]) else self.view.horizontal_num - 2
+        return Grid(col, row, self.cls_id, self.view)  
+    
+    def anti_distortion(self):
+        if self.is_distorted:
+            point1 = np.array([[self.x1, self.y1]], dtype=np.float32)
+            undistorted_point1 = cv2.undistortPoints(point1, self.view.camera_matrix, self.view.dist_coeffs, P=self.view.new_camera_matrix)
+            self.original_x1, self.original_y1 = copy.deepcopy(self.x1), copy.deepcopy(self.y1)
+            self.x1, self.y1 = undistorted_point1[0][0]
+
+            point2 = np.array([[self.x2, self.y2]], dtype=np.float32)
+            undistorted_point2 = cv2.undistortPoints(point2, self.view.camera_matrix, self.view.dist_coeffs, P=self.view.new_camera_matrix)
+            self.original_x2, self.original_y2 = copy.deepcopy(self.x2), copy.deepcopy(self.y2)
+            self.x2, self.y2 = undistorted_point2[0][0]
+
+            self.x, self.y = (self.x1 + self.x2)/2.0, (self.y1 + self.y2)/2.0
+            self.is_distorted = False
+        else:
+            pdb.set_trace()
+            self.is_distorted = True
+            return Point
+    
+    def projection(self, view, views_projections):
+        assert view.name != self.view.name
+        assert view.name == MAIN_VIEW
+        views_projection = views_projections[f'({view.name},{self.view.name})']
+        new_box = views_projection.box_projection(self)
+        return new_box
 
 class Point(object):
-    def __init__(self, x, y, view, is_distorted=True):
+    def __init__(self, x, y, cls_id, view, is_distorted=True):
         '''
         input:
             x,y: float point location
@@ -47,6 +115,7 @@ class Point(object):
         '''
         self.x, self.y = x, y 
         self.original_x, self.original_y = x, y 
+        self.cls_id = cls_id
         self.view = view 
         self.is_distorted = is_distorted
         self.grid = self.get_grid()
@@ -73,7 +142,7 @@ class Point(object):
         if row is None:
             # pdb.set_trace()
             row = 0 if point_to_line_distance((self.x, self.y), self.view.horizontal_lines[0]) < point_to_line_distance((self.x, self.y), self.view.horizontal_lines[-1]) else self.view.horizontal_num - 2
-        return Grid(col, row, self.view)   
+        return Grid(col, row, self.cls_id, self.view)   
     
     def anti_distortion(self):
         '''
@@ -107,7 +176,7 @@ class Point(object):
         new_point = views_projection.point_projection(self)
         return new_point
     
-    def update(self, point, weight=(1.0,1.0)):
+    def update(self, point, weight=(1.0,1.0,1.0)):
         '''
         func:
             update the object location with given Point and weight provided by the Point.view
@@ -119,11 +188,12 @@ class Point(object):
         assert self.is_distorted == point.is_distorted
         new_x = (self.x + point.x * weight[0]) / (1 + weight[0])
         new_y = (self.y + point.y * weight[1]) / (1 + weight[1])
-        return Point(new_x, new_y, self.view, self.is_distorted)
+        new_cls_id = (self.cls_id + point.cls_id*weight[2]) / (1 + weight[2])
+        return Point(new_x, new_y, new_cls_id, self.view, self.is_distorted)
 
 
 class Grid(object):
-    def __init__(self, x, y, view):
+    def __init__(self, x, y, cls_id, view):
         '''
         input:
             x, y: int number of object grid index, x is the width index (0~7), y is the height index (0~21)
@@ -132,6 +202,7 @@ class Grid(object):
             None
         '''
         self.x, self.y = x, y
+        self.cls_id = cls_id
         self.view = view
     
     def projection(self, view, views_projections):
@@ -167,10 +238,54 @@ class View(object):
         self.fx_ratio, self.fy_ratio = fx_ratio, fy_ratio
 
         self.grid_info = grid_info
-        self.set_lines()
+        if name == MAIN_VIEW:
+            self.set_main_lines()
+        else:
+            self.set_lines()
 
         self.set_camera_matrix()
     
+    def set_main_lines(self):
+        '''
+        func:
+            set the lines of the  main view
+            assume the swim pool is 25m X 15m
+            assume the grid is 22 X 8
+        '''
+        margin_width = 300
+        margin_height = 300
+        width = 1500 # cm
+        height = 2500 # cm
+        num_grid_width = 8
+        num_grid_height = 22
+        left_up, left_bottom, right_up, right_bottom = (margin_width, margin_height), (margin_width, height+margin_height), (width+margin_width, margin_height), (width+margin_width, height+margin_height)
+        width_grid = np.linspace(0, width, num_grid_width+1)
+        height_grid = np.linspace(0, height, num_grid_height+1)
+
+        top_border = [(x+margin_width, margin_height) for x in width_grid]
+        bottom_border = [(x+margin_width, height+margin_height) for x in width_grid]
+        left_border = [(margin_width, x+margin_height) for x in height_grid]
+        right_border = [(width+margin_width, x+margin_height) for x in height_grid]
+        
+
+        self.vertical_lines = []
+        self.horizontal_lines = []
+        
+        num_vertical_lines = len(top_border)
+        num_horizontal_lines = len(left_border)
+        for i in range(num_vertical_lines):
+            top_point = top_border[i]
+            bottom_point = bottom_border[i]
+            self.vertical_lines.append([top_point, bottom_point])
+            self.vertical_num = num_vertical_lines - 2
+
+        for i in range(num_horizontal_lines):
+            left_point = left_border[i]
+            right_point = right_border[i]
+            self.horizontal_lines.append([left_point, right_point])
+            self.horizontal_num = num_horizontal_lines - 2
+
+
     def anti_distortion(self, image):
         image = cv2.remap(image, self.mapx, self.mapy, cv2.INTER_LINEAR)
         return image
@@ -231,7 +346,7 @@ class View(object):
         top_border, bottom_border, left_border, right_border = self.grid_info
         assert len(top_border) == len(bottom_border)
         assert len(left_border) == len(right_border)
-        
+
         num_vertical_lines = len(top_border)
         num_horizontal_lines = len(left_border)
         for i in range(num_vertical_lines):
@@ -252,6 +367,7 @@ class LabelData(object):
         '''
         input:
             [(id, x, y, w, h), ...], a list store the labels data of a image sample
+            [(id, x1, y1, x2, y2, conf, cls_id), ...], a list store the labels data of a image sample
         output:
             None
         '''
@@ -266,7 +382,6 @@ class LabelData(object):
             None
         '''
         self.objects.append(object)
-
 
 class ImageData(object):
     def __init__(self, image_path, labels=None):
@@ -316,12 +431,12 @@ class ViewAssociation(object):
                 new_x = x
         [MODIFY] need modified  corresponding to the views and grid coordinate system
         '''
-        if self.view2.name == '2':              
-            pass                                # the same grid coordinate system with view 1
-        elif self.view2.name == '3':
+        if self.view2.name in ['1', '2']:
+            pass                    # the same grid coordinate system with the main view
+        elif self.view2.name in ['3', '4']:
             self.x_shift, self.y_shift = 1, 1   # inverse grid coordinate system with view 1
-        elif self.view2.name == '4':
-            self.x_shift, self.y_shift = 1, 1   # inverse grid coordinate system with view 1
+        else:
+            raise NotImplementedError("wrong view name, support 1~4 views")
 
         '''
         for point projection:
@@ -330,11 +445,9 @@ class ViewAssociation(object):
         '''
         # pdb.set_trace()
         target_points = self.view1.vertical_lines[0] + self.view1.vertical_lines[-1]
-        if self.view2.name == '2':
+        if self.view2.name in ['1', '2']:
             source_points = self.view2.vertical_lines[0] + self.view2.vertical_lines[-1]      
-        elif self.view2.name == '3':
-            source_points = [self.view2.vertical_lines[-1][1], self.view2.vertical_lines[-1][0], self.view2.vertical_lines[0][1], self.view2.vertical_lines[0][0]]
-        elif self.view2.name == '4':
+        elif self.view2.name in ['3', '4']:
             source_points = [self.view2.vertical_lines[-1][1], self.view2.vertical_lines[-1][0], self.view2.vertical_lines[0][1], self.view2.vertical_lines[0][0]]
 
         self.homography_matrix, _ = cv2.findHomography(np.array(source_points), np.array(target_points))
@@ -352,7 +465,7 @@ class ViewAssociation(object):
         assert grid.view == self.view2
         new_x = (1 - 2 * self.x_shift) * grid.x + self.x_shift * self.x_grid_num
         new_y = (1 - 2 * self.y_shift) * grid.y + self.y_shift * self.y_grid_num
-        return Grid(new_x, new_y, self.view1)
+        return Grid(new_x, new_y, grid.cls_id, self.view1)
 
     def point_projection(self, point):
         '''
@@ -368,16 +481,26 @@ class ViewAssociation(object):
         point_homogeneous = np.array([point.x, point.y, 1])
         projected_point_homogeneous = self.homography_matrix @ point_homogeneous
         projected_point = projected_point_homogeneous[:2] / projected_point_homogeneous[2]
-        return Point(projected_point[0], projected_point[1], self.view1, is_distorted=False)
+        return Point(projected_point[0], projected_point[1], point.cls_id, self.view1, is_distorted=False)
+
+    def box_projection(self, box):
+        assert box.view.name == self.view2.name
+        point_homogeneous1 = np.array([box.x1, box.y1, 1])
+        projected_point_homogeneous1 = self.homography_matrix @ point_homogeneous1
+        projected_point1 = projected_point_homogeneous1[:2] / projected_point_homogeneous1[2]
+
+        point_homogeneous2 = np.array([box.x2, box.y2, 1])
+        projected_point_homogeneous2 = self.homography_matrix @ point_homogeneous2
+        projected_point2 = projected_point_homogeneous2[:2] / projected_point_homogeneous2[2]
+        
+        return Box(projected_point1[0], projected_point1[1], projected_point2[0], projected_point2[1], box.conf, box.cls_id, self.view1, is_distorted=False)
 
 class MultiViewAssociation(object):
     def __init__(self, img_root, label_root, grid_root):
         self.img_root = img_root
         self.label_root = label_root
         self.grid_root = grid_root
-        self.views = self.init_views()
-        self.main_view = self.views[0]
-        self.asso_views = self.views[1:]
+        self.init_views()
         self.views_imgs = self.scan_files()
         self.views_projections = self.init_view_association()
     
@@ -391,13 +514,12 @@ class MultiViewAssociation(object):
         with open(self.grid_root, 'r') as f:
             grid_info = json.load(f)
 
+        self.main_view = View(MAIN_VIEW, p1=0, p2=0, k1=0, k2=0, k3=0, fx=1280, fy=720, cx=1280, cy=720, fx_ratio=1.0, fy_ratio=1.0, grid_info=None)
         view1 = View('1', p1=0, p2=0, k1=-0.5353, k2=0.2875, k3=-0.0906, fx=1621.9, fy=1856.1, cx=1116.3, cy=742.9178, fx_ratio=1.33, fy_ratio=1.33, grid_info=grid_info[0])
         view2 = View('2', p1=0, p2=0, k1=-0.5153, k2=0.2845, k3=-0.0906, fx=1621.9, fy=1856.1, cx=1116.3, cy=742.9178, fx_ratio=1.34, fy_ratio=1.34, grid_info=grid_info[1])
         view3 = View('3', p1=0, p2=0, k1=-0.5253, k2=0.2845, k3=-0.0906, fx=1621.9, fy=1856.1, cx=1116.3, cy=742.9178, fx_ratio=1.34, fy_ratio=1.34, grid_info=grid_info[2])
         view4 = View('4', p1=0, p2=0, k1=-0.5253, k2=0.2875, k3=-0.0906, fx=1621.9, fy=1856.1, cx=1116.3, cy=742.9178, fx_ratio=1.34, fy_ratio=1.34, grid_info=grid_info[3])
-        views = [view1, view2, view3, view4]
-
-        return views
+        self.views = [view1, view2, view3, view4]
 
     def init_view_association(self):
         '''
@@ -414,9 +536,8 @@ class MultiViewAssociation(object):
             }
         '''
         views_projections = dict()
-        MainView = self.main_view
-        for View in self.asso_views:
-            views_projections[f"({MainView.name},{View.name})"] = ViewAssociation(MainView, View)
+        for view in self.views:
+            views_projections[f"({MAIN_VIEW},{view.name})"] = ViewAssociation(self.main_view, view)
         
         return views_projections
 
@@ -450,7 +571,8 @@ class MultiViewAssociation(object):
             if line_data[7] != 0:   # filter the ashore person
                 idx = line_data[1]
                 x,y,w,h = line_data[2:6]
-                res[frame_id-1].update((idx, x, y, w, h))
+                cls_id = line_data[7]
+                res[frame_id-1].update((idx, x, y, w, h, cls_id))
         return res
 
     def scan_files(self):
@@ -483,11 +605,9 @@ class MultiViewAssociation(object):
         output:
         '''
         association_data = AssociationData()
-        main_image_data = self.views_imgs[self.main_view.name][idx]
-        association_data.LabelData2AssociationData(main_image_data, self.main_view)
-        association_data.RandomDropObject(self.main_view)
-        print(self.main_view.name, [x[0][0] for x in association_data.association_data[self.main_view.name]])
-        for view in self.asso_views:
+        main_view_data = ImageData(image_path='main_view.jpg', labels=LabelData())
+        association_data.LabelData2AssociationData(main_view_data, self.main_view)
+        for view in self.views:
             ViewImageData = self.views_imgs[view.name][idx]
             association_data.LabelData2AssociationData(ViewImageData, view)
             association_data.RandomDropObject(view)
@@ -495,8 +615,9 @@ class MultiViewAssociation(object):
             association_data.associate(self.views_projections)
 
         print('matching result ...')
+        pdb.set_trace()
         for obj in association_data.association_data[self.main_view.name]:
-            print(obj[0])       #print the associate results
+            print(obj[0], obj[1].cls_id)       #print the associate results
         
         # self.visualization(association_data)    # if association error happened
     
@@ -542,21 +663,6 @@ class MultiViewAssociation(object):
             pdb.set_trace()
 
 
-        # original points
-        
-        # num_objects = len(data)
-
-        # for item in 
-        # idxs, points, grids, paths, views = zip()
-        # for view_id in range(len(idxs)):
-        #     idx, point, grid, path, view = idxs[view_id], points[view_id], grids[view_id], paths[view_id], views[view_id]
-        #     # draw original points on original view image
-        #     image = cv
-            
-
-            
-        pass
-
 class Drawer(object):
     def __init__(self, w, h, path):
         self.w, self.h = w, h 
@@ -585,12 +691,38 @@ class Drawer(object):
         cv2.imwrite(self.path, self.image)
         print(f"saving image to {self.path}")
 
+class MultiViewAssociationStream(MultiViewAssociation):
+    def __init__(self, grid_root):
+        self.grid_root = grid_root
+        self.init_views()
+        self.views_projections = self.init_view_association()
+    
+    def forward(self, multi_view_data):
+        association_data = AssociationData()
+        main_view_data = ImageData(image_path='main_view.jpg', labels=LabelData())
+        association_data.LabelData2AssociationData(main_view_data, self.main_view)
+        for idx, view in enumerate(self.views):
+            ViewImageData = self.construct_view_image_data(multi_view_data[idx])
+            association_data.LabelData2AssociationData(ViewImageData, view)
+            association_data.associate(self.views_projections)
+        
+        return association_data
+
+    def construct_view_image_data(self, view_data):
+        label = LabelData()
+        data = ImageData(image_path=None,labels=label)
+        for item in view_data:
+            x1, y1, x2, y2, object_id, conf, cls_id = item
+            data.update((object_id, x1, y1, x2, y2, conf, cls_id))
+        return data
+
 
 class AssociationData(object):
-    def __init__(self):
+    def __init__(self, distance_threshold=400.0):
         '''
         input:
             label_data: LabelData object
+            distance_threshold: int, mm, when the distance of 2 box larger than distance_threshold, they are 2 objects
         self.association_data:
             {
             view1: [([idx], Point, Grid), ([idx], Point, Grid), ...]
@@ -602,6 +734,7 @@ class AssociationData(object):
             viewx: [([idx], [Point], [Grid], [img_path], [viewx]), ([idx], [Point], [Grid], [img_path], [viewx]), ...]
             }
         '''
+        self.distance_threshold = distance_threshold
         self.association_data = {}
         self.vis_association_data = {}
         self.views = []
@@ -621,11 +754,11 @@ class AssociationData(object):
         self.views.append(view)
 
         for label in image_data.labels.objects:
-            object_id, cx, cy = label[0], label[1] + label[3]/2.0, label[2] + label[4]/2.0
-            point = Point(cx, cy, view)
-            grid = point.grid
-            self.association_data[view.name].append(([object_id], point, grid))
-            self.vis_association_data[view.name].append(([object_id], [point], [grid], [image_data.image_path], [view]))
+            object_id, x1, y1, x2, y2, conf, cls_id = label
+            box = Box(x1, y1, x2, y2, conf, cls_id, view)
+            grid = box.grid
+            self.association_data[view.name].append(([object_id], box, grid))
+            self.vis_association_data[view.name].append(([object_id], [box], [grid], [image_data.image_path], [view]))
     
     def RandomDropObject(self, view):
         '''
@@ -680,79 +813,69 @@ class AssociationData(object):
         associate_view_data = self.association_data[associate_view.name]
 
         # 
-        main_view_point = [x[1] for x in main_view_data]
+        
+        main_view_box = [x[1] for x in main_view_data]
         main_view_grid = [x[2] for x in main_view_data]
-        main_view_path = [x[3] for x in self.vis_association_data[main_view.name]]
+        main_view_path = [x[3] for x in main_view_data]
 
-        associate_view_point = [x[1] for x in associate_view_data]
+        # print('main_view ids', [x[0] for x in main_view_data])
+        associate_view_box = [x[1] for x in associate_view_data]
         associate_view_grid = [x[2] for x in associate_view_data]
         associate_view_path = [x[3] for x in self.vis_association_data[associate_view.name]]       
-
+        # print('asso_view ids', [x[0] for x in associate_view_data])
         # grid projection
-        associate_view_point_projection = [x[1].projection(main_view, views_projections) for x in associate_view_data]
+        associate_view_box_projection = [x[1].projection(main_view, views_projections) for x in associate_view_data]
         associate_view_grid_projection = [x[2].projection(main_view, views_projections) for x in associate_view_data]
 
-        # hungarian_match
-        cost_matrix = np.zeros((len(main_view_grid), len(associate_view_grid)))
-        # for i, grid_idx1 in enumerate(main_view_point):  #main_view_point or main_view_grid
-        #     for j, grid_idx2 in enumerate(associate_view_point_projection):  #associate_view_point_projection or associate_view_grid_projection
+        cost_matrix = np.full((len(main_view_box), len(associate_view_box)), 1e9)
 
-        for i, grid_idx1 in enumerate(main_view_grid):
-            for j, grid_idx2 in enumerate(associate_view_grid_projection):  
-                cost_matrix[i, j] = math.sqrt((grid_idx1.x - grid_idx2.x)**2 + (grid_idx1.y - grid_idx2.y)**2)
+        for i, grid_idx1 in enumerate(main_view_box):  #main_view_box or main_view_grid
+            for j, grid_idx2 in enumerate(associate_view_box_projection):  #associate_view_box_projection or associate_view_grid_projection
+                cost = math.sqrt((grid_idx1.x - grid_idx2.x)**2 + (grid_idx1.y - grid_idx2.y)**2)
+                if cost <= self.distance_threshold:
+                    cost_matrix[i, j] = math.sqrt((grid_idx1.x - grid_idx2.x)**2 + (grid_idx1.y - grid_idx2.y)**2)
         
-        # pdb.set_trace()
+        used_indices_view1 = []
+        used_indices_view2 = []
         row_ind, col_ind = linear_sum_assignment(cost_matrix)
-        match_result = []
-        for i, j in zip(row_ind, col_ind):
-            matched_item = (
-                [main_view_data[i][0][0], associate_view_data[j][0][0]],    # [view1_idx, viewx_idx]
-                [main_view_point[i], associate_view_point_projection[j], associate_view_point[j]],  # [view1_point, viewx_point_projection, viewx_point]
-                [main_view_grid[i], associate_view_grid_projection[j], associate_view_grid[j]],  # [view1_grid, viewx_grid_projection, viewx_grid]
-                [main_view_path[i], associate_view_path[j]]     # [view1_path, viewx_path]
-            )
-            match_result.append(matched_item)
-
-        # record the visualization result
-        for idx, item in enumerate(match_result):
-            main_view_id = self.association_data[main_view.name][idx][0][0]
-            matched_main_view_id = match_result[idx][0][0]
-            assert main_view_id == matched_main_view_id
-            matched_asso_view_id = match_result[idx][0][1]
-
-            # pdb.set_trace()
-            self.vis_association_data[main_view.name][idx] = (
-                self.vis_association_data[main_view.name][idx][0] + [matched_asso_view_id], # [view1_idx, viewx_idx]
-                self.vis_association_data[main_view.name][idx][1] + [copy.deepcopy(match_result[idx][1][2])], # [view1_pts, viewx_pts]
-                self.vis_association_data[main_view.name][idx][2] + [copy.deepcopy(match_result[idx][2][2])], # [view1_grid, viewx_grid]
-                self.vis_association_data[main_view.name][idx][3] + copy.deepcopy(match_result[idx][3][1]), # [view1_path, viewx_path]
-                self.vis_association_data[main_view.name][idx][4] + [associate_view]                  # [view1, viewx]
-            )
-
-
-        # update the match_results for association
-        for item in match_result:
-            item[1][0].update(item[1][1])   # update the point location
-            item[2][0] = item[1][0].grid    # updated point grid
-        # pdb.set_trace()
-        for idx, item in enumerate(match_result):
-            main_view_id = self.association_data[main_view.name][idx][0][0]
-            matched_main_view_id = match_result[idx][0][0]
-            assert main_view_id == matched_main_view_id
-            matched_asso_view_id = match_result[idx][0][1]
-            self.association_data[main_view.name][idx] = (
-                self.association_data[main_view.name][idx][0] + [matched_asso_view_id],  # [view1_idx, viewx_idx]
-                item[1][0],                  # Point'
-                item[2][0],                  # Grid'
-            )             
-            # pdb.set_trace()
         
+        
+        cost = []
+        used_indices_view1, used_indices_view2 = [], []
+        for i, j in zip(row_ind, col_ind):
+            if cost_matrix[i,j] < self.distance_threshold:
+                cost.append(cost_matrix[i,j])
+                updated_box = main_view_box[i].update(associate_view_box_projection[j])
+                self.association_data[main_view.name][i] = (
+                    main_view_data[i][0] + associate_view_data[j][0],   #[view1_idx, viewx_idx]
+                    updated_box, # box
+                    updated_box.grid, # grid
+                    [main_view_path[i], associate_view_path[j]] #[view1_path, viewx_path]
+                )
+                used_indices_view1.append(i)
+                used_indices_view2.append(j)
+        
+        for j in range(len(associate_view_box_projection)):
+            if j not in used_indices_view2:
+                self.association_data[main_view.name].append((
+                    [None] + associate_view_data[j][0],
+                    associate_view_box_projection[j],
+                    associate_view_box_projection[j].grid,
+                    [None, associate_view_path[j]]
+                ))
+        
+        # main_view_data = [[x[1].x1, x[1].y1, x[1].x2, x[1].y2, x[1].conf, x[1].cls_id] for x in self.association_data[main_view.name]]
+        # main_view_data = np.stack(main_view_data)
+        # main_view_data[:, -1] = np.round(main_view_data[:, -1])
+        # if np.min(main_view_data) <= 0:
+        #     pdb.set_trace()
+        # print('updated main_view ids', [x[0] for x in self.association_data[main_view.name]])
 
 
-img_root = r'/home/chaoqunwang/swimAD/dataset/dataset_v20250506/afternoon'
-label_root = r'/home/chaoqunwang/swimAD/data_transfer/mot/dataset_v20250506/afternoon'
-grid_root = r'calibration_v1.json'
-associator = MultiViewAssociation(img_root, label_root, grid_root)
-for i in range(10):
-    associator.forward(i)
-    pdb.set_trace()
+# img_root = r'/home/chaoqunwang/swimAD/dataset/dataset_v20250506/afternoon'
+# label_root = r'/home/chaoqunwang/swimAD/data_transfer/mot/dataset_v20250506/afternoon'
+# grid_root = r'calibration_v1.json'
+# associator = MultiViewAssociationStream(grid_root)
+# for i in range(10):
+#     associator.forward(i)
+#     pdb.set_trace()

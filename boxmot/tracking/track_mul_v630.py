@@ -1,11 +1,12 @@
 # Mikel Broström 🔥 Yolo Tracking 🧾 AGPL-3.0 license
 
-import os
+import os, glob
 import argparse
 import cv2
 import numpy as np
 from functools import partial
 from pathlib import Path
+import math, copy
 
 import torch
 
@@ -21,11 +22,15 @@ checker.check_packages(('ultralytics @ git+https://github.com/mikel-brostrom/ult
 
 from ultralytics import YOLO
 from ultralytics.utils.plotting import Annotator, colors
-from ultralytics.data.utils import VID_FORMATS
+from ultralytics.data.utils import VID_FORMATS, IMG_FORMATS
 from ultralytics.utils.plotting import save_one_box
+from ultralytics.engine.results import Results, Boxes
+
+from boxmot.multi_view_association.test_stream import MultiViewAssociationStream
+from ultralytics.trackers.track import on_predict_postprocess_end
+
 
 import pdb
-
 
 
 def on_predict_start(predictor, persist=False):
@@ -64,67 +69,114 @@ def run(args):
 
     if args.imgsz is None:
         args.imgsz = default_imgsz(args.yolo_model)
-    pdb.set_trace()
-    yolo = YOLO(args.yolo_model)
+    # pdb.set_trace()
+    dirs = os.listdir(args.sources)
+    view_nums = len(dirs)
+    yolos = [YOLO(args.yolo_model) for _ in range(view_nums+1)]
     
-    results = yolo.track(
-        source=args.source,
-        conf=args.conf,
-        iou=args.iou,
-        agnostic_nms=args.agnostic_nms,
-        show=False,
-        stream=True,
-        device=args.device,
-        show_conf=args.show_conf,
-        save_txt=args.save_txt,
-        show_labels=args.show_labels,
-        save=args.save,
-        verbose=args.verbose,
-        exist_ok=args.exist_ok,
-        project=args.project,
-        name=args.name,
-        classes=args.classes,
-        imgsz=args.imgsz,
-        vid_stride=args.vid_stride,
-        line_width=args.line_width
-    )
+    results = []
+    for idx, yolo in enumerate(yolos):
+        result = yolo.track(
+            source=os.path.join(args.sources, dirs[idx % view_nums]),
+            conf=args.conf,
+            iou=args.iou,
+            agnostic_nms=args.agnostic_nms,
+            show=False,
+            stream=True,
+            device=args.device,
+            show_conf=args.show_conf,
+            save_txt=args.save_txt,
+            show_labels=args.show_labels,
+            save=args.save,
+            verbose=args.verbose,
+            exist_ok=args.exist_ok,
+            project=args.project,
+            name=args.name,
+            classes=args.classes,
+            imgsz=args.imgsz,
+            vid_stride=args.vid_stride,
+            line_width=args.line_width,
+        )
+        
 
-    yolo.add_callback('on_predict_start', partial(on_predict_start, persist=True))
+        yolo.add_callback('on_predict_start', partial(on_predict_start, persist=True))
 
-    if not is_ultralytics_model(args.yolo_model):
-        # replace yolov8 model
-        m = get_yolo_inferer(args.yolo_model)
-        yolo_model = m(model=args.yolo_model, device=yolo.predictor.device,
-                       args=yolo.predictor.args)
-        yolo.predictor.model = yolo_model
-
-        # If current model is YOLOX, change the preprocess and postprocess
-        if not is_ultralytics_model(args.yolo_model):
-            # add callback to save image paths for further processing
-            yolo.add_callback(
-                "on_predict_batch_start",
-                lambda p: yolo_model.update_im_paths(p)
-            )
-            yolo.predictor.preprocess = (
-                lambda imgs: yolo_model.preprocess(im=imgs))
-            yolo.predictor.postprocess = (
-                lambda preds, im, im0s:
-                yolo_model.postprocess(preds=preds, im=im, im0s=im0s))
-
-    # store custom args in predictor
-    yolo.predictor.custom_args = args
-
+        # store custom args in predictor
+        yolo.predictor.custom_args = args
+        results.append(result)
 
     if args.save_video is True:
         all_imgs = []
 
-    for r in results:
-        # pdb.set_trace()
-        img = yolo.predictor.trackers[0].plot_results(r.orig_img, args.show_trajectories)
+    # pdb.set_trace()
+    # setup main view tracker
+    print('init the main view tracker...')
+    # pdb.set_trace()
+    main_view_predictor = yolos[-1].predictor
+    main_view_predictor.setup_source(args.sources[0])
+    on_predict_start(main_view_predictor)
+    # main_view_predictor.trackers[0].w, main_view_predictor.trackers[0].h = 2100, 3100
+    print('init the multi view associator...')
+    assocaition = MultiViewAssociationStream(r'boxmot/multi_view_association/calibration_v1.json')
+    
+    print('running the multi view stream...')
+    for (r1, r2, r3, r4) in zip(results[0], results[1], results[2], results[3]):
+        view_data = [r1.boxes.data.cpu().numpy(), r2.boxes.data.cpu().numpy(), r3.boxes.data.cpu().numpy(), r4.boxes.data.cpu().numpy()]
 
+        # filter the ashore person
+        multi_view_data = [arr[arr[:, -1] != 0] for arr in view_data]
+        main_view_data = assocaition.forward(multi_view_data)
+        main_view_data = [[x[1].x1, x[1].y1, x[1].x2, x[1].y2, x[1].conf, x[1].cls_id] for x in main_view_data.association_data['MAIN']]
+        main_view_data = np.stack(main_view_data)
+        main_view_data[:, -1] = np.round(main_view_data[:, -1])
+
+        # filter the object out of the range
+        limits = [(0, 2100), (0, 3100), (0, 2100), (0, 3100), (0, 1), (1, 2)]
+        bool_indices = np.ones(main_view_data.shape[0], dtype=bool)  # 初始全为 True
+        for i, (min_val, max_val) in enumerate(limits):
+            bool_indices &= (main_view_data[:, i] >= min_val) & (main_view_data[:, i] <= max_val) 
+        main_view_data = main_view_data[bool_indices]
+        
+        new_img =  np.zeros((3100, 2100, 3), dtype=np.uint8)
+        cv2.rectangle(new_img, (300, 300), (1800, 2800),  (0, 255, 0), 3)   # margin
+        for box in main_view_data:
+            box, conf, cls_id = box[:4], box[4], box[5]
+            cv2.rectangle(new_img, (int(box[0]), int(box[1])), (int(box[2]), int(box[3])),  (0, 255, 0), 3)
+            # cv2.imwrite('ab.jpg', new_img)
+            # print(box-300)
+            # pdb.set_trace()
+        new_img = cv2.resize(new_img, (2100, 2880), interpolation=cv2.INTER_LINEAR)
+
+        # pdb.set_trace()
+        main_view_predictor.vid_path = ['aa.jpg']
+        main_view_predictor.results = [
+            Results(
+                orig_img = np.zeros((3100, 2100, 3), dtype=np.uint8),
+                path = 'aa.jpg',
+                names = {0: 'ashore', 1: 'above', 2: 'under'},
+                boxes = torch.as_tensor(main_view_data).to(torch.device(f"cuda:{args.device}")),
+            )
+        ]
+
+        # pdb.set_trace()
+        on_predict_postprocess_end(main_view_predictor)
+        
+        img1 = yolos[0].predictor.trackers[0].plot_results(r1.orig_img, args.show_trajectories, fontscale=1, thickness=4)
+        img2 = yolos[1].predictor.trackers[0].plot_results(r2.orig_img, args.show_trajectories, fontscale=1, thickness=4)
+        img3 = yolos[2].predictor.trackers[0].plot_results(r3.orig_img, args.show_trajectories, fontscale=1, thickness=4)
+        img4 = yolos[3].predictor.trackers[0].plot_results(r4.orig_img, args.show_trajectories, fontscale=1, thickness=4)
+        main_img = main_view_predictor.trackers[0].plot_results(np.zeros((3100, 2100, 3), dtype=np.uint8), args.show_trajectories, fontscale=1)
+
+        
+        main_img = cv2.resize(main_img, (2100, 2880), interpolation=cv2.INTER_LINEAR)
+        img = np.hstack((np.vstack((np.hstack((img1, img2)), np.hstack((img3, img4)))),main_img,new_img))
+        img = cv2.resize(img, None, fx=0.5,fy=0.5, interpolation=cv2.INTER_LINEAR)
         if args.save_video is True:
             all_imgs.append(img)
 
+        print(main_view_data)
+        cv2.imwrite('aa.jpg', img)
+        pdb.set_trace()
         if args.show is True:
             cv2.imshow('BoxMOT', img)     
             key = cv2.waitKey(1) & 0xFF
@@ -153,7 +205,7 @@ def parse_opt():
                         help='reid model path')
     parser.add_argument('--tracking-method', type=str, default='deepocsort',
                         help='deepocsort, botsort, strongsort, ocsort, bytetrack, imprassoc, boosttrack')
-    parser.add_argument('--source', type=str, default='0',
+    parser.add_argument('--sources', type=str, default='0',
                         help='file/dir/URL/glob, 0 for webcam')
     parser.add_argument('--imgsz', '--img', '--img-size', nargs='+', type=int, default=None,
                         help='inference size h,w')
@@ -161,6 +213,8 @@ def parse_opt():
                         help='confidence threshold')
     parser.add_argument('--iou', type=float, default=0.7,
                         help='intersection over union (IoU) threshold for NMS')
+    parser.add_argument('--batch', type=int, default=1,
+                        help='batch size. 4 for multi view inference')
     parser.add_argument('--device', default='',
                         help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--show', action='store_true',

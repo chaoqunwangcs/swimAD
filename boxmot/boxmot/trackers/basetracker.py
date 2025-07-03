@@ -351,9 +351,18 @@ class BaseTracker(BaseRules):
                 self.id_to_color(id),  
                 thickness
             )
+            txt = f'{int(id)}, {self.cls_map[str(int(cls))]}'
+            text_size, _ = cv.getTextSize(txt, cv.FONT_HERSHEY_SIMPLEX, fontscale, thickness)
+            cv.rectangle(
+                img,
+                (int(box[0]), int(box[1]) - 10 - text_size[1]),
+                (int(box[0])+text_size[0], int(box[1]) + 10),
+                (255,255,255),
+                -1
+            )
             img = cv.putText(
                 img,
-                f'{int(id)}, {self.cls_map[str(int(cls))]}',
+                txt,
                 (int(box[0]), int(box[1]) - 10),
                 cv.FONT_HERSHEY_SIMPLEX,
                 fontscale,
@@ -557,6 +566,44 @@ class BaseTracker(BaseRules):
                 
         return img
 
+    def plot_multi_view_results(self, img: np.ndarray, show_trajectories: bool, thickness: int = 2, fontscale: float = 0.5) -> np.ndarray:
+        """
+        Visualizes the trajectories of all active tracks on the image. For each track,
+        it draws the latest bounding box and the path of movement if the history of
+        observations is longer than two. This helps in understanding the movement patterns
+        of each tracked object.
+
+        Parameters:
+        - img (np.ndarray): The image array on which to draw the trajectories and bounding boxes.
+        - show_trajectories (bool): Whether to show the trajectories.
+        - thickness (int): The thickness of the bounding box.
+        - fontscale (float): The font scale for the text.
+
+        Returns:
+        - np.ndarray: The image array with trajectories and bounding boxes of all active tracks.
+        """
+
+        # if values in dict
+        if self.per_class_active_tracks is not None:
+            for k in self.per_class_active_tracks.keys():
+                active_tracks = self.per_class_active_tracks[k]
+                for a in active_tracks:
+                    if a.history_observations:
+                        if len(a.history_observations) > 2:
+                            box = a.history_observations[-1]
+                            img = self.plot_plain_box_on_img(img, box, a.conf, a.cls, a.id, thickness, fontscale)
+                            if show_trajectories:
+                                img = self.plot_trackers_trajectories(img, a.history_observations, a.id)
+        else:
+            for a in self.active_tracks:
+                if a.history_observations:
+                    if len(a.history_observations) > 2:
+                        box = a.history_observations[-1]
+                        img = self.plot_plain_box_on_img(img, box, a.conf, a.cls, a.id, thickness, fontscale)
+                        if show_trajectories:
+                            img = self.plot_trackers_trajectories(img, a.history_observations, a.id)
+                
+        return img
 
     def plot_results(self, img: np.ndarray, show_trajectories: bool, thickness: int = 2, fontscale: float = 0.5) -> np.ndarray:
         """

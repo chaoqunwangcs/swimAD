@@ -71,6 +71,11 @@
             ```
             python -m tracking.track --source `video_path`[webcam(0)/.mp4/.jpg/path/url] --yolo-model `yolo_ckpt_path` --tracking-method `track_method` --reid-model osnet_x0_25_market1501.pt --save-txt --device `GPU_id`
             ```
+        
+        2. -[x] 多视角推理
+        ```
+        python -m tracking.track_v0702 --source ../dataset/dataset_v20250506/afternoon --yolo-model /home/chaoqunwang/swimAD/yolo_train/runs/detect/yolov11l_swimAD_v0604_shuffle_bs64_e250_op_auto/weights/best.pt --tracking-method ocsort --save-video --device 1 --save --save-video --show-trajectories
+        ```
 
         例如：
         ```

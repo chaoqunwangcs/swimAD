@@ -246,7 +246,7 @@ class OcSort(BaseTracker):
         Returns the a similar array, where the last column is the object ID.
         NOTE: The number of objects returned may differ from the number of detections provided.
         """
-
+        # import pdb; pdb.set_trace()
         self.check_inputs(dets, img)
 
         self.frame_count += 1

@@ -1,11 +1,12 @@
 # Mikel Broström 🔥 Yolo Tracking 🧾 AGPL-3.0 license
 
-import os
+import os, glob
 import argparse
 import cv2
 import numpy as np
 from functools import partial
 from pathlib import Path
+import math
 
 import torch
 
@@ -21,11 +22,12 @@ checker.check_packages(('ultralytics @ git+https://github.com/mikel-brostrom/ult
 
 from ultralytics import YOLO
 from ultralytics.utils.plotting import Annotator, colors
-from ultralytics.data.utils import VID_FORMATS
+from ultralytics.data.utils import VID_FORMATS, IMG_FORMATS
 from ultralytics.utils.plotting import save_one_box
 
-import pdb
 
+
+import pdb
 
 
 def on_predict_start(predictor, persist=False):
@@ -86,30 +88,11 @@ def run(args):
         classes=args.classes,
         imgsz=args.imgsz,
         vid_stride=args.vid_stride,
-        line_width=args.line_width
+        line_width=args.line_width,
     )
 
+    pdb.set_trace()
     yolo.add_callback('on_predict_start', partial(on_predict_start, persist=True))
-
-    if not is_ultralytics_model(args.yolo_model):
-        # replace yolov8 model
-        m = get_yolo_inferer(args.yolo_model)
-        yolo_model = m(model=args.yolo_model, device=yolo.predictor.device,
-                       args=yolo.predictor.args)
-        yolo.predictor.model = yolo_model
-
-        # If current model is YOLOX, change the preprocess and postprocess
-        if not is_ultralytics_model(args.yolo_model):
-            # add callback to save image paths for further processing
-            yolo.add_callback(
-                "on_predict_batch_start",
-                lambda p: yolo_model.update_im_paths(p)
-            )
-            yolo.predictor.preprocess = (
-                lambda imgs: yolo_model.preprocess(im=imgs))
-            yolo.predictor.postprocess = (
-                lambda preds, im, im0s:
-                yolo_model.postprocess(preds=preds, im=im, im0s=im0s))
 
     # store custom args in predictor
     yolo.predictor.custom_args = args
@@ -119,7 +102,7 @@ def run(args):
         all_imgs = []
 
     for r in results:
-        # pdb.set_trace()
+        pdb.set_trace()
         img = yolo.predictor.trackers[0].plot_results(r.orig_img, args.show_trajectories)
 
         if args.save_video is True:
@@ -161,6 +144,8 @@ def parse_opt():
                         help='confidence threshold')
     parser.add_argument('--iou', type=float, default=0.7,
                         help='intersection over union (IoU) threshold for NMS')
+    parser.add_argument('--batch', type=int, default=1,
+                        help='batch size. 4 for multi view inference')
     parser.add_argument('--device', default='',
                         help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--show', action='store_true',

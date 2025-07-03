@@ -76,11 +76,7 @@
         ```
         python -m tracking.track_v0702 --source ../dataset/dataset_v20250506/afternoon --yolo-model /home/chaoqunwang/swimAD/yolo_train/runs/detect/yolov11l_swimAD_v0604_shuffle_bs64_e250_op_auto/weights/best.pt --tracking-method ocsort --save-video --device 1 --save --save-video --show-trajectories
         ```
-
-        例如：
-        ```
-        python -m tracking.track --source ../dataset/dataset_v20250506/noon/1/ --yolo-model ../ckpts/yolo11L_epoch250.pt --tracking-method deepocsort --reid-model osnet_x0_25_market1501.pt --show-trajectories --device 0
-        ```
+        遗留问题：box投影时，会发生畸变，导师box长度或者宽度异常，需要重新设计box投影
         2. -[ ] 评测
        
            文件格式要求:
@@ -120,6 +116,7 @@
     4. - [ ] 设计多视角联合跟踪问题
     5. - [x] 基于单视角检测结果，设计rule-based规则，判断是否溺水
     6. - [ ] 更新rules规则，大家可以写在[规则](rules.md)文件中
+    7. - [ ] 需要重新设计box投影
 
 
 

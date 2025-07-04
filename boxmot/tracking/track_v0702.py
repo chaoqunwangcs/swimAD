@@ -813,8 +813,8 @@ def run(args):
         all_images = []
     
     for idx, r in enumerate(results):
-        # if idx > 100:
-        #     break
+        if idx > 100:
+            break
         # each view det result
         img_view1 = plot_ids(r[0], line_width=yolo.predictor.args.line_width,boxes=yolo.predictor.args.show_boxes,conf=yolo.predictor.args.show_conf,labels=yolo.predictor.args.show_labels,im_gpu=r[0].orig_img)
         img_view2 = plot_ids(r[1], line_width=yolo.predictor.args.line_width,boxes=yolo.predictor.args.show_boxes,conf=yolo.predictor.args.show_conf,labels=yolo.predictor.args.show_labels,im_gpu=r[1].orig_img)

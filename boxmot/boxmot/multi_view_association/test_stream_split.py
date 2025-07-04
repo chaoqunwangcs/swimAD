@@ -18,6 +18,8 @@ POOL_WIDTH = 1500
 POOL_HEIGHT = 2500
 MARGIN_WIDTH = 300
 MARGIN_HEIGHT = 300
+OVERLAP_WIDTH = 200
+OVERLAP_HEIGHT = 200
 
 class Box(object):
     def __init__(self, x1, y1, x2, y2, conf, cls_id, cur_view, source_view, image_path, is_distorted=True):
@@ -359,10 +361,10 @@ class ViewAssociation(object):
 
     def keep_box(self, box):
         width_half, height_half = POOL_WIDTH / 2.0, POOL_HEIGHT / 2.0
-        x_min = MARGIN_WIDTH + width_half * self.x_shift
-        x_max = x_min + width_half
-        y_min = MARGIN_HEIGHT + height_half * self.y_shift
-        y_max = y_min + height_half
+        x_min = MARGIN_WIDTH + width_half * self.x_shift - OVERLAP_WIDTH
+        x_max = x_min + width_half + OVERLAP_WIDTH
+        y_min = MARGIN_HEIGHT + height_half * self.y_shift - OVERLAP_WIDTH
+        y_max = y_min + height_half + OVERLAP_WIDTH
 
         cx, cy = box.cx, box.cy
 

@@ -813,8 +813,8 @@ def run(args):
         all_images = []
     
     for idx, r in enumerate(results):
-        if idx > 100:
-            break
+        # if idx > 100:
+        #     break
         # each view det result
         img_view1 = plot_ids(r[0], line_width=yolo.predictor.args.line_width,boxes=yolo.predictor.args.show_boxes,conf=yolo.predictor.args.show_conf,labels=yolo.predictor.args.show_labels,im_gpu=r[0].orig_img)
         img_view2 = plot_ids(r[1], line_width=yolo.predictor.args.line_width,boxes=yolo.predictor.args.show_boxes,conf=yolo.predictor.args.show_conf,labels=yolo.predictor.args.show_labels,im_gpu=r[1].orig_img)
@@ -836,7 +836,7 @@ def run(args):
         # merge together
         canvas = np.hstack((np.vstack((np.hstack((img_view1, img_view2)), np.hstack((img_view3, img_view4)))),main_det, main_track))
         cv2.putText(canvas, f'{idx:05d}', ((canvas.shape[1]-600), int(MARGIN_HEIGHT/1.5)), cv2.FONT_HERSHEY_SIMPLEX, 5, (255, 255, 255), thickness=5)
-        canvas = cv2.resize(canvas, None, fx=0.4,fy=0.4, interpolation=cv2.INTER_LINEAR)
+        canvas = cv2.resize(canvas, None, fx=0.5,fy=0.5, interpolation=cv2.INTER_LINEAR)
         
         if args.save:
             root = os.path.join('runs', yolo.predictor.args.name)

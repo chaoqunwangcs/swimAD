@@ -395,27 +395,21 @@ class ViewAssociation(object):
 
     def box_projection(self, box):
         assert box.view.name == self.source_view.name
-        point_homogeneous1 = np.array([box.x1, box.y1, 1])
-        projected_point_homogeneous1 = self.homography_matrix @ point_homogeneous1
-        projected_point1 = projected_point_homogeneous1[:2] / projected_point_homogeneous1[2]
-        point_homogeneous2 = np.array([box.x2, box.y2, 1])
-        projected_point_homogeneous2 = self.homography_matrix @ point_homogeneous2
-        projected_point2 = projected_point_homogeneous2[:2] / projected_point_homogeneous2[2]
-        new_w1, new_h1 = abs(projected_point2[0]-projected_point1[0])/2.0, abs(projected_point2[1]-projected_point1[1])/2.0
+        # point_homogeneous1 = np.array([box.x1, box.y1, 1])
+        # projected_point_homogeneous1 = self.homography_matrix @ point_homogeneous1
+        # projected_point1 = projected_point_homogeneous1[:2] / projected_point_homogeneous1[2]
 
-        point_homogeneous1 = np.array([box.x2, box.y1, 1])
-        projected_point_homogeneous1 = self.homography_matrix @ point_homogeneous1
-        projected_point1 = projected_point_homogeneous1[:2] / projected_point_homogeneous1[2]
-        point_homogeneous2 = np.array([box.x1, box.y2, 1])
-        projected_point_homogeneous2 = self.homography_matrix @ point_homogeneous2
-        projected_point2 = projected_point_homogeneous2[:2] / projected_point_homogeneous2[2]
-        new_w2, new_h2 = abs(projected_point2[0]-projected_point1[0])/2.0, abs(projected_point2[1]-projected_point1[1])/2.0
+        # point_homogeneous2 = np.array([box.x2, box.y2, 1])
+        # projected_point_homogeneous2 = self.homography_matrix @ point_homogeneous2
+        # projected_point2 = projected_point_homogeneous2[:2] / projected_point_homogeneous2[2]
+        # new_w, new_h = abs(projected_point2[0]-projected_point1[0])/2.0, abs(projected_point2[1]-projected_point1[1])/2.0
 
-        if new_w1 * new_h1 >= new_w2 * new_h2:
-            new_w, new_h = new_w1, new_h1
-        else:
-            new_w, new_h = new_w2, new_h2
+        new_w = 75 # set the width as 75 cm
+        old_w, old_h = abs(box.x2 - box.x1), abs(box.y2 - box.y1)
+        ratio = max(old_w/old_h, old_h/old_w)   # calculate the height with the ratio in the view image
+        new_h = min(new_w * ratio, 200)         # set the max height as 200 cm
 
+        new_w, new_h = new_w / 2.0, new_h / 2.0
         point_homogeneousc = np.array([box.cx, box.cy, 1])
         projected_point_homogeneousc = self.homography_matrix @ point_homogeneousc
         projected_pointc = projected_point_homogeneousc[:2] / projected_point_homogeneousc[2]
@@ -577,27 +571,27 @@ class AssociationData(object):
                 main_view_data.append(box.projection(views_projections))
                 # tmp.append(box.projection(views_projections))
             # plot box on source view both original and anti_distorted image
-            # source_img = cv2.imread(box.image_path)
-            # anti_distorted_source_img = view.anti_distortion(source_img)
-            # for idx, box in enumerate(view_data):
-            #     cv2.rectangle(source_img, (int(box.original_x1), int(box.original_y1)), (int(box.original_x2), int(box.original_y2)), (0,255,0), 3)
-            #     cv2.putText(source_img, str(idx), (int(box.original_x1), int(box.original_y1)-20), cv2.FONT_HERSHEY_SIMPLEX, 3, (0,255,0), thickness=3)
+        #     source_img = cv2.imread(box.image_path)
+        #     anti_distorted_source_img = view.anti_distortion(source_img)
+        #     for idx, box in enumerate(view_data):
+        #         cv2.rectangle(source_img, (int(box.original_x1), int(box.original_y1)), (int(box.original_x2), int(box.original_y2)), (0,255,0), 3)
+        #         cv2.putText(source_img, str(idx), (int(box.original_x1), int(box.original_y1)-20), cv2.FONT_HERSHEY_SIMPLEX, 3, (0,255,0), thickness=3)
 
-            # for idx, box in enumerate(view_data):
-            #     cv2.rectangle(anti_distorted_source_img, (int(box.x1), int(box.y1)), (int(box.x2), int(box.y2)), (0,255,0), 3)
-            #     cv2.putText(anti_distorted_source_img, str(idx), (int(box.x1), int(box.y1)-20), cv2.FONT_HERSHEY_SIMPLEX, 3, (0,255,0), thickness=3)
+        #     for idx, box in enumerate(view_data):
+        #         cv2.rectangle(anti_distorted_source_img, (int(box.x1), int(box.y1)), (int(box.x2), int(box.y2)), (0,255,0), 3)
+        #         cv2.putText(anti_distorted_source_img, str(idx), (int(box.x1), int(box.y1)-20), cv2.FONT_HERSHEY_SIMPLEX, 3, (0,255,0), thickness=3)
 
-            # is_keeps = [x.is_keep(views_projections) for x in tmp]
-            # main_view = np.zeros((3100, 2100, 3), dtype=np.uint8)
-            # for idx, box in enumerate(tmp):
-            #     cv2.rectangle(main_view, (int(box.x1), int(box.y1)), (int(box.x2), int(box.y2)), (0,255,0), 3)
-            #     cv2.putText(main_view, str(idx), (int(box.x1), int(box.y1)-30), cv2.FONT_HERSHEY_SIMPLEX, 3, (0,255,0), thickness=3)
-            #     cv2.putText(main_view, str(is_keeps[idx]), (int(box.x1)+20, int(box.y1)-20), cv2.FONT_HERSHEY_SIMPLEX, 3, (0,255,0), thickness=3)
+        #     is_keeps = [x.is_keep(views_projections) for x in tmp]
+        #     main_view = np.zeros((3100, 2100, 3), dtype=np.uint8)
+        #     for idx, box in enumerate(tmp):
+        #         cv2.rectangle(main_view, (int(box.x1), int(box.y1)), (int(box.x2), int(box.y2)), (0,255,0), 3)
+        #         cv2.putText(main_view, str(idx), (int(box.x1), int(box.y1)-30), cv2.FONT_HERSHEY_SIMPLEX, 3, (0,255,0), thickness=3)
+        #         cv2.putText(main_view, str(is_keeps[idx]), (int(box.x1)+20, int(box.y1)-20), cv2.FONT_HERSHEY_SIMPLEX, 3, (0,255,0), thickness=3)
             
-            # cv2.imwrite(f'{view.name}_a1.jpg', source_img)
-            # cv2.imwrite(f'{view.name}_a2.jpg', anti_distorted_source_img)
-            # cv2.imwrite(f'{view.name}_a3.jpg', main_view)
-            # pdb.set_trace() 
+        #     cv2.imwrite(f'./tmp/{view.name}_a1.jpg', source_img)
+        #     cv2.imwrite(f'./tmp/{view.name}_a2.jpg', anti_distorted_source_img)
+        #     cv2.imwrite(f'./tmp/{view.name}_a3.jpg', main_view)
+        # pdb.set_trace() 
         # merge by the region
         keep_objects = [x for x in main_view_data if x.is_keep(views_projections)]
         self.association_data[MAIN_VIEW] = keep_objects

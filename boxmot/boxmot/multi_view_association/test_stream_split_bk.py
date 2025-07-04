@@ -157,15 +157,7 @@ class View(object):
         self.set_camera_matrix()
     
     def set_region(self):
-        # self.polygon = [list(map(int, self.grid_info[0][0])), list(map(int, self.grid_info[0][1])), list(map(int, self.grid_info[1][1])), list(map(int, self.grid_info[1][0]))] #clockwise
-        if self.name == '1':
-            self.polygon = [[143, 577], [543, 522], [1558, 823], [740, 1294]]
-        elif self.name == '2':
-            self.polygon = [[1625, 416], [2240, 489], [1297, 1372], [436, 776]]
-        elif self.name == '3':
-            self.polygon = [[289, 555], [745, 499], [1931, 882], [866, 1405]]
-        elif self.name == '4':
-            self.polygon = [[1384, 498], [1976, 553], [1315, 1424], [307, 844]]
+        self.polygon = [list(map(int, self.grid_info[0][0])), list(map(int, self.grid_info[0][1])), list(map(int, self.grid_info[1][1])), list(map(int, self.grid_info[1][0]))] #clockwise
         self.polygon_array = np.array(self.polygon)
 
     def anti_distortion(self, image):
@@ -278,9 +270,9 @@ class ViewAssociation(object):
         elif self.source_view.name == '2':
             source_points = [[1623,317],[327,603],[2315,341],[1285,1255]]
         elif self.source_view.name == '3':
-            source_points = [[2127, 675], [705,411], [953,1251], [272,459]]
-        elif self.source_view.name == '4':
             source_points = [[1152, 1272], [2072, 400], [217, 667], [1456, 381]]
+        elif self.source_view.name == '4':
+            source_points = [[2127, 675], [705,411], [953,1251], [272,459]]
         else:
             raise NotImplementedError('Not support this view {self.source_view.name}!')
 
@@ -424,9 +416,10 @@ class MultiViewAssociationStream(object):
             ViewImageData = ImageData(image_path=dets[idx]['image_path'], labels=LabelData(dets[idx]['det']), view=view)
             association_data.LabelData2AssociationData(ViewImageData)
         
-        association_data.associate(self.views_projections)
+        canvas = association_data.associate(self.views_projections)
+        return canvas
         
-        return [x.data() for x in association_data.association_data[self.main_view.name]]
+        # return [x.data() for x in association_data.association_data[self.main_view.name]]
 
 class Drawer(object):
     def __init__(self, w, h, path):
@@ -487,7 +480,7 @@ class AssociationData(object):
 
         for label in image_data.labels.objects:
             x1, y1, x2, y2, conf, cls_id = label
-            box = Box(x1, y1, x2, y2, conf, cls_id, view, view, image_data.image_path, is_distorted=True)  # used for test
+            box = Box(x1, y1, x2, y2, conf, cls_id, view, view, image_data.image_path, is_distorted=False)  # used for test
             self.association_data[view.name].append(box)
 
     def associate(self, views_projections):
@@ -510,49 +503,51 @@ class AssociationData(object):
                 MAIN_VIEW: [box1, box2, ...]
                 }
         '''
-        main_view_data = []
+        all_main_view_data = []
         all_view_imgs = []
         for view in self.views:
-            tmp = []
+            main_view_data = []
             view_data = self.association_data[view.name]
+            # if view.name == '3':
+            #     pdb.set_trace()
             for box in view_data:
-                tmp.append(box.projection(views_projections))
-                flag = [x.is_keep(views_projections) for x in view_data]
                 if box.is_keep(views_projections):
                     main_view_data.append(box.projection(views_projections))
+                    all_main_view_data.append(box.projection(views_projections))
             # plot box on source view both original and anti_distorted image
-        #     source_img = cv2.imread(box.image_path)
-        #     anti_distorted_source_img = view.anti_distortion(source_img)
-        #     anti_distorted_source_img = view.draw_polygon(anti_distorted_source_img)
+            source_img = cv2.imread(box.image_path)
+            anti_distorted_source_img = view.anti_distortion(source_img)
+            anti_distorted_source_img = view.draw_polygon(anti_distorted_source_img)
 
-        #     for idx, box in enumerate(view_data):
-        #         cv2.rectangle(anti_distorted_source_img, (int(box.x1), int(box.y1)), (int(box.x2), int(box.y2)), (0,255,0), 3)
-        #         cv2.putText(anti_distorted_source_img, str(idx), (int(box.x1), int(box.y1)-20), cv2.FONT_HERSHEY_SIMPLEX, 3, (0,255,0), thickness=3)
+            for idx, box in enumerate(view_data):
+                cv2.rectangle(anti_distorted_source_img, (int(box.x1), int(box.y1)), (int(box.x2), int(box.y2)), (0,255,0), 3)
+                cv2.putText(anti_distorted_source_img, str(idx), (int(box.x1), int(box.y1)-20), cv2.FONT_HERSHEY_SIMPLEX, 3, (0,255,0), thickness=3)
 
-        #     main_view = np.zeros((3100, 2100, 3), dtype=np.uint8)
-        #     cv2.rectangle(main_view, (0,0), (2100, 3100), (0,255,0), 3)
-        #     for idx, box in enumerate(tmp):
-        #         cv2.rectangle(main_view, (int(box.x1), int(box.y1)), (int(box.x2), int(box.y2)), (0,255,0), 3)
-        #         cv2.putText(main_view, str(flag[idx]), (int(box.x1), int(box.y1)-30), cv2.FONT_HERSHEY_SIMPLEX, 3, (0,255,0), thickness=3)
+            main_view = np.zeros((3100, 2100, 3), dtype=np.uint8)
+            cv2.rectangle(main_view, (0,0), (2100, 3100), (0,255,0), 3)
+            for idx, box in enumerate(main_view_data):
+                cv2.rectangle(main_view, (int(box.x1), int(box.y1)), (int(box.x2), int(box.y2)), (0,255,0), 3)
+                cv2.putText(main_view, str(idx), (int(box.x1), int(box.y1)-30), cv2.FONT_HERSHEY_SIMPLEX, 3, (0,255,0), thickness=3)
             
-        #     main_view = cv2.resize(main_view, (int(main_view.shape[1]*(anti_distorted_source_img.shape[0]/main_view.shape[0])), anti_distorted_source_img.shape[0]),interpolation=cv2.INTER_LINEAR)
-        #     img = np.hstack((anti_distorted_source_img, main_view))
-        #     all_view_imgs.append(img)
-        # all_main_view = np.zeros((3100, 2100, 3), dtype=np.uint8)
-        # cv2.rectangle(all_main_view, (0,0), (2100, 3100), (0,255,0), 3)
-        # for idx, box in enumerate(main_view_data):
-        #     cv2.rectangle(all_main_view, (int(box.x1), int(box.y1)), (int(box.x2), int(box.y2)), (0,255,0), 3)
-        #     cv2.putText(all_main_view, str(idx), (int(box.x1), int(box.y1)-30), cv2.FONT_HERSHEY_SIMPLEX, 3, (0,255,0), thickness=3)
-        # all_main_view = cv2.resize(all_main_view, (int(main_view.shape[1]*(2*anti_distorted_source_img.shape[0]/main_view.shape[0])), 2*anti_distorted_source_img.shape[0]),interpolation=cv2.INTER_LINEAR)
+            main_view = cv2.resize(main_view, (int(main_view.shape[1]*(anti_distorted_source_img.shape[0]/main_view.shape[0])), anti_distorted_source_img.shape[0]),interpolation=cv2.INTER_LINEAR)
+            img = np.hstack((anti_distorted_source_img, main_view))
+            all_view_imgs.append(img)
+            # cv2.imwrite(f'./tmp/{frame_id:03d}_{view.name}.jpg', img)
+        all_main_view = np.zeros((3100, 2100, 3), dtype=np.uint8)
+        cv2.rectangle(all_main_view, (0,0), (2100, 3100), (0,255,0), 3)
+        for idx, box in enumerate(all_main_view_data):
+            cv2.rectangle(all_main_view, (int(box.x1), int(box.y1)), (int(box.x2), int(box.y2)), (0,255,0), 3)
+            cv2.putText(all_main_view, str(idx), (int(box.x1), int(box.y1)-30), cv2.FONT_HERSHEY_SIMPLEX, 3, (0,255,0), thickness=3)
+        all_main_view = cv2.resize(all_main_view, (int(main_view.shape[1]*(2*anti_distorted_source_img.shape[0]/main_view.shape[0])), 2*anti_distorted_source_img.shape[0]),interpolation=cv2.INTER_LINEAR)
 
-        # canvas = np.hstack((np.vstack((np.hstack((all_view_imgs[0], all_view_imgs[1])), np.hstack((all_view_imgs[2], all_view_imgs[3])))),all_main_view))
+        canvas = np.hstack((np.vstack((np.hstack((all_view_imgs[0], all_view_imgs[1])), np.hstack((all_view_imgs[2], all_view_imgs[3])))),all_main_view))
         # cv2.imwrite(f'aa.jpg', canvas)
         # pdb.set_trace()
-        # return canvas
+        return canvas
         # pdb.set_trace() 
         # merge by the region
         # keep_objects = [x for x in main_view_data if x.is_keep(views_projections)]
-        self.association_data[MAIN_VIEW] = main_view_data
+        # self.association_data[MAIN_VIEW] = keep_objects
 
 # grid_root = r'calibration_v1.json'
 # associator = MultiViewAssociation(grid_root)

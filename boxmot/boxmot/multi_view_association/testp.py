@@ -15,6 +15,6 @@ def point_in_quadrilateral(x, y, vertices):
     return inside
 
 # Example usage:
-vertices = [(0, 0), (2, 0), (2, 2), (0, 2)]  # Clockwise square
-point = (1, 1)
+vertices = [[1625, 416], [2240, 489], [1297, 1372], [436, 776]]  # Clockwise square
+point = (347.0, 625.0)
 print(point_in_quadrilateral(point[0], point[1], vertices))  # True

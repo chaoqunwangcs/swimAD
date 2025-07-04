@@ -4,6 +4,8 @@
 *.pt
 *.pth
 *.pyc
+*.cache
+*.mp4
 
 # ignore the data_transfer and dataset folders(default save the original and transferred annotation files)
 data_transfer/
@@ -19,8 +21,13 @@ ckpts/
 tmp/
 logs/
 boxmot/runs/
+boxmot/tmp
+boxmot/*.jpg
+boxmot/boxmot/multi_view_association/tmp
+boxmot/boxmot/multi_view_association/*.jpg
 boxmot/boxmot/logs/
 yolo_train/runs/
+yolo_train/*.jpg
 boxmot/multiview_tool/tmp
 boxmot/tmp
 

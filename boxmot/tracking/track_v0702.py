@@ -743,6 +743,8 @@ def on_predict_postprocess_end(predictor: object, persist: bool = False) -> None
     # N * 6, x1, y1, x2, y2, conf, cls_id
     multi_view_det = predictor.associator.forward(dets)
     det = np.array(multi_view_det)
+    if len(multi_view_det) == 0:
+        det = np.zeros((0, 6))
     main_results = Results(
         np.zeros((2*MARGIN_HEIGHT+POOL_HEIGHT, 2*MARGIN_WIDTH+POOL_WIDTH, 3), dtype=np.uint8),
         path='aa.jpg',
@@ -894,7 +896,7 @@ def parse_opt():
                         help='save video tracking results')
     parser.add_argument('--save-video', action='store_true',
                         help='save video tracking results in .mp4 format')
-    parser.add_argument('--calibration', default='boxmot/multi_view_association/calibration_v1.json',
+    parser.add_argument('--calibration', default='boxmot/multi_view_association/region_calibration_data_v1.json',
                         help='the annotated calibration file, used for multi view association')
 
     # class 0 is person, 1 is bycicle, 2 is car... 79 is oven

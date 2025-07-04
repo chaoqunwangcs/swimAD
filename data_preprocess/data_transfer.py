@@ -566,7 +566,9 @@ def transfer_to_yolo_video(folder, save_path):
             shape_type = shape.get('shape_type')
 
             if shape_type != 'rectangle' or label_str is None or points is None or len(points) != 2:
-                logging.debug(f"在 {filename} 中跳过无效或非矩形标注: {shape}")
+                # pdb.set_trace()
+                logging.debug(f"在 {json_file_path} 中跳过无效或非矩形标注: {shape}")
+                
                 continue
             
             parsed_labels = parse_custom_label(label_str)

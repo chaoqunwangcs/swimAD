@@ -36,7 +36,7 @@
     
         ```
         cd yolo_train   # update to the detector when align the performance
-        python convert_data.py --version dataset_v20250506  # only once, preprocess the training structure, split the training and val set
+        python convert_data.py --data-version dataset_v20250506  # only once, preprocess the training structure, split the training and val set
 
         python train.py --cfg cfgs/model_yolo11l_v20250506.yaml --name yolov11l_swimAD --ckpt ../ckpts/yolo11l.pt   # train and val the model
 
@@ -79,6 +79,8 @@
         遗留问题：box投影时，会发生畸变，导师box长度或者宽度异常，需要重新设计box投影
         
         暂时的方案是，设置box宽度为0.75米，长度为：宽度*倍数。倍数=max(长/宽,宽/长)(反畸变之后的图像)
+
+
         
         2. -[ ] 评测
        
@@ -119,7 +121,10 @@
     4. - [ ] 设计多视角联合跟踪问题
     5. - [x] 基于单视角检测结果，设计rule-based规则，判断是否溺水
     6. - [ ] 更新rules规则，大家可以写在[规则](rules.md)文件中
-    7. - [ ] 需要重新设计box投影
+    7. - [x] 需要重新设计box投影
+    8. - [ ] 由于按照投影后的区域划分，中间区域投影不准确，需要换个方式，里面原始区域。所以得标注四个视角的四个区域，并查看边缘部分投影后是否会跳变
+    9. - [ ] 由于跳变问题，是否需要每个视角设置一个tracker，用5个tracker进行判断
+    10. -[ ] 统计推理速度
 
 
 

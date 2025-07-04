@@ -45,7 +45,7 @@ def parse_arguments():
 
 # training ratio = 0.5, one clip to train and one clip to val
 
-training_ratio = 0.9
+training_ratio = 1.0
 
 def scan_clips(clips, save_path, data_version):
     all_items = []

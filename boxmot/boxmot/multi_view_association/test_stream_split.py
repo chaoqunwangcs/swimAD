@@ -21,6 +21,23 @@ MARGIN_HEIGHT = 300
 OVERLAP_WIDTH = 200
 OVERLAP_HEIGHT = 200
 
+def in_polygon(point, polygon):
+    x, y = point
+    n = len(polygon)
+    inside = False
+    for i in range(n):
+        x0, y0 = polygon[i]
+        x1, y1 = polygon[(i + 1) % n]
+        # Check if point is on the edge
+        if (y == y0 == y1) and (min(x0, x1) <= x <= max(x0, x1)):
+            return True  # On the edge
+        if min(y0, y1) <= y < max(y0, y1):
+            x_intersect = x0 + (y - y0) * (x1 - x0) / (y1 - y0)
+            if x < x_intersect:
+                inside = not inside
+    return inside
+
+
 class Box(object):
     def __init__(self, x1, y1, x2, y2, conf, cls_id, cur_view, source_view, image_path, is_distorted=True):
         self.cx, self.cy = (x1 + x2)/2.0, (y1 + y2)/2.0
@@ -134,53 +151,13 @@ class View(object):
         self.set_camera_matrix()
 
         self.grid_info = grid_info
-        if name == MAIN_VIEW:
-            self.set_main_lines()
-        else:
-            self.set_lines()
+        if name != MAIN_VIEW:
+            self.set_region()
 
         self.set_camera_matrix()
     
-    def set_main_lines(self):
-        '''
-        func:
-            set the lines of the  main view
-            assume the swim pool is 25m X 15m
-            assume the grid is 22 X 8
-        '''
-        margin_width = MARGIN_WIDTH
-        margin_height = MARGIN_HEIGHT
-        width = POOL_WIDTH # cm
-        height = POOL_HEIGHT # cm
-        num_grid_width = 8
-        num_grid_height = 22
-        left_up, left_bottom, right_up, right_bottom = (margin_width, margin_height), (margin_width, height+margin_height), (width+margin_width, margin_height), (width+margin_width, height+margin_height)
-        width_grid = np.linspace(0, width, num_grid_width+1)
-        height_grid = np.linspace(0, height, num_grid_height+1)
-
-        top_border = [(x+margin_width, margin_height) for x in width_grid]
-        bottom_border = [(x+margin_width, height+margin_height) for x in width_grid]
-        left_border = [(margin_width, x+margin_height) for x in height_grid]
-        right_border = [(width+margin_width, x+margin_height) for x in height_grid]
-        
-
-        self.vertical_lines = []
-        self.horizontal_lines = []
-        
-        num_vertical_lines = len(top_border)
-        num_horizontal_lines = len(left_border)
-        for i in range(num_vertical_lines):
-            top_point = top_border[i]
-            bottom_point = bottom_border[i]
-            self.vertical_lines.append([top_point, bottom_point])
-            self.vertical_num = num_vertical_lines - 2
-
-        for i in range(num_horizontal_lines):
-            left_point = left_border[i]
-            right_point = right_border[i]
-            self.horizontal_lines.append([left_point, right_point])
-            self.horizontal_num = num_horizontal_lines - 2
-
+    def set_region(self):
+        self.polygon = [self.grid_info[0][0], self.grid_info[0][1], self.grid_info[1][1], self.grid_info[1][0]] #clockwise
 
     def anti_distortion(self, image):
         image = cv2.remap(image, self.mapx, self.mapy, cv2.INTER_LINEAR)
@@ -213,50 +190,6 @@ class View(object):
         self.mapx, self.mapy = cv2.initUndistortRectifyMap(
             self.camera_matrix, self.dist_coeffs, None, self.new_camera_matrix, 
             (w, h), cv2.CV_32FC1)
-
-    def set_lines(self):
-        '''
-        func:
-            calculate the annotated lines of the grid, used for calcaluting the grid index
-        input:
-            self.grid_info
-            [
-                top_border[pts1[x,y], pts2[x,y], ...],
-                bottom_border,
-                ...
-            ]
-        output:
-            self.vertical_lines
-            [
-                line1[[pts1[x,y], pts2[x,y]]],
-                line2,
-                ...
-            ]
-            self.horizontal_lines
-        '''
-        assert self.grid_info is not None
-        
-        self.vertical_lines = []
-        self.horizontal_lines = []
-
-        top_border, bottom_border, left_border, right_border = self.grid_info
-        assert len(top_border) == len(bottom_border)
-        assert len(left_border) == len(right_border)
-
-        num_vertical_lines = len(top_border)
-        num_horizontal_lines = len(left_border)
-        for i in range(num_vertical_lines):
-            top_point = top_border[i]
-            bottom_point = bottom_border[i]
-            self.vertical_lines.append([top_point, bottom_point])
-            self.vertical_num = num_vertical_lines - 2
-
-        for i in range(num_horizontal_lines):
-            left_point = left_border[i]
-            right_point = right_border[i]
-            self.horizontal_lines.append([left_point, right_point])
-            self.horizontal_num = num_horizontal_lines - 2
-
 
 class LabelData(object):
     def __init__(self, objects=[]):
@@ -360,24 +293,29 @@ class ViewAssociation(object):
             raise NotImplementedError('Not support this view name!')
 
     def keep_box(self, box):
-        width_half, height_half = POOL_WIDTH / 2.0, POOL_HEIGHT / 2.0
-        x_min = MARGIN_WIDTH + width_half * self.x_shift - OVERLAP_WIDTH
-        x_max = x_min + width_half + OVERLAP_WIDTH
-        y_min = MARGIN_HEIGHT + height_half * self.y_shift - OVERLAP_WIDTH
-        y_max = y_min + height_half + OVERLAP_WIDTH
-
         cx, cy = box.cx, box.cy
+        polygon = box.source_view.polygon
+        return in_polygon((cx,cy), polygon)
 
-        if self.x_shift == 0 and self.y_shift == 0:
-            return ((cx <= x_max) and (cy <= y_max))
-        elif self.x_shift == 1 and self.y_shift == 0:
-            return ((cx >= x_min) and (cy <= y_max))
-        elif self.x_shift == 0 and self.y_shift == 1:
-            return ((cx <= x_max) and (cy >= y_min))
-        elif self.x_shift == 1 and self.y_shift == 1:
-            return ((cx >= x_min) and (cy >= y_min))
-        else:
-            raise NotImplementedError('Wrong case!')
+    # def keep_box(self, box):
+    #     width_half, height_half = POOL_WIDTH / 2.0, POOL_HEIGHT / 2.0
+    #     x_min = MARGIN_WIDTH + width_half * self.x_shift - OVERLAP_WIDTH
+    #     x_max = x_min + width_half + OVERLAP_WIDTH
+    #     y_min = MARGIN_HEIGHT + height_half * self.y_shift - OVERLAP_WIDTH
+    #     y_max = y_min + height_half + OVERLAP_WIDTH
+
+    #     cx, cy = box.cx, box.cy
+
+    #     if self.x_shift == 0 and self.y_shift == 0:
+    #         return ((cx <= x_max) and (cy <= y_max))
+    #     elif self.x_shift == 1 and self.y_shift == 0:
+    #         return ((cx >= x_min) and (cy <= y_max))
+    #     elif self.x_shift == 0 and self.y_shift == 1:
+    #         return ((cx <= x_max) and (cy >= y_min))
+    #     elif self.x_shift == 1 and self.y_shift == 1:
+    #         return ((cx >= x_min) and (cy >= y_min))
+    #     else:
+    #         raise NotImplementedError('Wrong case!')
 
 
     def point_projection(self, point):
@@ -570,7 +508,8 @@ class AssociationData(object):
             view_data = self.association_data[view.name]
             # tmp = []
             for box in view_data:
-                main_view_data.append(box.projection(views_projections))
+                if box.is_keep():
+                    main_view_data.append(box.projection(views_projections))
                 # tmp.append(box.projection(views_projections))
             # plot box on source view both original and anti_distorted image
         #     source_img = cv2.imread(box.image_path)

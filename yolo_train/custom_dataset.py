@@ -4,6 +4,8 @@ import numpy as np
 import random
 import pdb
 
+from boxmot.multi_view_association.test_stream_split import View, Box
+
 from ultralytics.data.dataset import YOLODataset
 from ultralytics.utils import DEFAULT_CFG, LOCAL_RANK, LOGGER, NUM_THREADS, TQDM, colorstr
 from ultralytics.data.utils import FORMATS_HELP_MSG, HELP_URL, IMG_FORMATS
@@ -12,6 +14,7 @@ from torch.utils.data import DataLoader
 from ultralytics.utils.checks import check_version
 from ultralytics.data.augment import Compose, Format, Mosaic, RandomPerspective, CopyPaste, MixUp, RandomHSV, RandomFlip, LetterBox
 from ultralytics.models.yolo.detect.val import DetectionValidator
+from ultralytics.utils.metrics import ConfusionMatrix, DetMetrics, box_iou
 from utils import load_dataset_cache_file, get_hash
 
 from ultralytics.models.yolo.detect.train import DetectionTrainer
@@ -302,19 +305,25 @@ class CustomDataset(YOLODataset):
         self.img2label_dict = dict()
         try:
             f = []
-            p = Path(img_path)
-            assert p.is_file()    # save the img_path and corresponding label path # absolute path
-            with open(p, encoding="utf-8") as t:
-                items = t.read().strip().splitlines()
-            for item in items:
-                file_path, anno_path = item.split(',')
-                file_path = file_path.strip()
-                anno_path = anno_path.strip()
-                if not (Path(file_path).is_file() and Path(anno_path).is_file()):
-                    continue
-                # assert Path(file_path).is_file() and Path(anno_path).is_file()
-                f.append(file_path)
-                self.img2label_dict[file_path] = anno_path
+            if isinstance(img_path, str):
+                img_path = [img_path]
+            for path in img_path:
+                p = Path(path)
+                assert p.is_file()    # save the img_path and corresponding label path # absolute path
+                with open(p, encoding="utf-8") as t:
+                    items = t.read().strip().splitlines()
+                for item in items:
+                    try:
+                        file_path, anno_path = item.split(',')
+                    except:
+                        pdb.set_trace()
+                    file_path = file_path.strip()
+                    anno_path = anno_path.strip()
+                    if not (Path(file_path).is_file() and Path(anno_path).is_file()):
+                        continue
+                    # assert Path(file_path).is_file() and Path(anno_path).is_file()
+                    f.append(file_path)
+                    self.img2label_dict[file_path] = anno_path
 
             im_files = sorted(x.replace("/", os.sep) for x in f if x.split(".")[-1].lower() in IMG_FORMATS)
             assert im_files, f"{self.prefix}No images found in {img_path}. {FORMATS_HELP_MSG}"
@@ -444,9 +453,147 @@ class CustomTrainer(DetectionTrainer):
         return build_custom_dataset(self.args, img_path, batch, self.data, mode=mode, rect=mode == "val", stride=gs)
 
 class CustomValidator(DetectionValidator):
+    def __init__(self, dataloader=None, save_dir=None, pbar=None, args=None, _callbacks=None, region='all'):
+        """
+        Initialize detection validator with necessary variables and settings.
+
+        Args:
+            dataloader (torch.utils.data.DataLoader, optional): Dataloader to use for validation.
+            save_dir (Path, optional): Directory to save results.
+            pbar (Any, optional): Progress bar for displaying progress.
+            args (dict, optional): Arguments for the validator.
+            _callbacks (list, optional): List of callback functions.
+        """
+        super().__init__(dataloader, save_dir, pbar, args, _callbacks)
+        self.nt_per_class = None
+        self.nt_per_image = None
+        self.is_coco = False
+        self.is_lvis = False
+        self.class_map = None
+        self.args.task = "detect"
+        self.metrics = DetMetrics(save_dir=self.save_dir)
+        self.iouv = torch.linspace(0.5, 0.95, 10)  # IoU vector for mAP@0.5:0.95
+        self.niou = self.iouv.numel()
+        self.lb = []  # for autolabelling
+        self.region = region
+        if self.args.save_hybrid and self.args.task == "detect":
+            LOGGER.warning(
+                "WARNING ⚠️ 'save_hybrid=True' will append ground truth to predictions for autolabelling.\n"
+                "WARNING ⚠️ 'save_hybrid=True' will cause incorrect mAP.\n"
+            )
+        self.init_views()
+
+    def init_views(self):
+        view1 = View('1', p1=0, p2=0, k1=-0.5353, k2=0.2875, k3=-0.0906, fx=1621.9, fy=1856.1, cx=1116.3, cy=742.9178, fx_ratio=1.33, fy_ratio=1.33, grid_info=None)
+        view2 = View('2', p1=0, p2=0, k1=-0.5153, k2=0.2845, k3=-0.0906, fx=1621.9, fy=1856.1, cx=1116.3, cy=742.9178, fx_ratio=1.34, fy_ratio=1.34, grid_info=None)
+        view3 = View('3', p1=0, p2=0, k1=-0.5253, k2=0.2845, k3=-0.0906, fx=1621.9, fy=1856.1, cx=1116.3, cy=742.9178, fx_ratio=1.34, fy_ratio=1.34, grid_info=None)
+        view4 = View('4', p1=0, p2=0, k1=-0.5253, k2=0.2875, k3=-0.0906, fx=1621.9, fy=1856.1, cx=1116.3, cy=742.9178, fx_ratio=1.34, fy_ratio=1.34, grid_info=None)
+        self.views = {'1': view1, '2': view2, '3': view3, '4': view4}
+
     def build_dataset(self, img_path, mode="val", batch=None):
         return build_custom_dataset(self.args, img_path, batch, self.data, mode=mode, stride=self.stride)
 
+    def update_metrics(self, preds, batch):
+        """
+        Update metrics with new predictions and ground truth.
 
+        Args:
+            preds (List[torch.Tensor]): List of predictions from the model.
+            batch (dict): Batch data containing ground truth.
+        """
+        for si, pred in enumerate(preds):
+            self.seen += 1
+            npr = len(pred)
+            stat = dict(
+                conf=torch.zeros(0, device=self.device),
+                pred_cls=torch.zeros(0, device=self.device),
+                tp=torch.zeros(npr, self.niou, dtype=torch.bool, device=self.device),
+            )
+            pbatch = self._prepare_batch(si, batch)
+
+            # pdb.set_trace()
+            if self.region != 'all':
+                ## filter the object out of region of the ground-truth
+                view_name = str(batch['im_file'][si].split('/')[-2])
+                clses, bboxes = pbatch.pop("cls"), pbatch.pop("bbox")
+                device = bboxes.device
+                clses, bboxes = clses.cpu().numpy(), bboxes.cpu().numpy()
+                cls_gt, bbox_gt = [], []
+
+                for obj_id in range(bboxes.shape[0]):
+                    x1, y1, x2, y2 = bboxes[obj_id]
+                    c = clses[obj_id]
+                    if Box(x1, y1, x2, y2, 1.0, c, self.views[view_name], self.views[view_name], None, is_distorted=True).is_keep() == (self.region == 'region'):
+                        bbox_gt.append([x1, y1, x2, y2])
+                        cls_gt.append(c)
+
+                if len(bbox_gt) == 0:
+                    bbox_gt = np.zeros((0, 4))
+                else:
+                    bbox_gt = np.array(bbox_gt)
+                bbox_gt = torch.as_tensor(bbox_gt).to(device)
+                cls_gt = torch.as_tensor(np.array(cls_gt)).to(device)
+                pbatch['cls'], pbatch['bbox'] = cls_gt, bbox_gt
+                npr = len(bbox_gt)
+                ## filter the object out of region of the ground-truth
+
+            cls, bbox = pbatch.pop("cls"), pbatch.pop("bbox")
+            nl = len(cls)
+            stat["target_cls"] = cls
+            stat["target_img"] = cls.unique()
+            if npr == 0:
+                if nl:
+                    for k in self.stats.keys():
+                        self.stats[k].append(stat[k])
+                    if self.args.plots:
+                        self.confusion_matrix.process_batch(detections=None, gt_bboxes=bbox, gt_cls=cls)
+                continue
+
+            # Predictions
+            if self.args.single_cls:
+                pred[:, 5] = 0
+            predn = self._prepare_pred(pred, pbatch)
+
+            if self.region != 'all':
+                ## filter the object out of region of the prediction
+                bboxes = predn
+                device = predn.device
+                bboxes = bboxes.cpu().numpy()
+                bbox_pred = []
+
+                for obj_id in range(bboxes.shape[0]):
+                    x1, y1, x2, y2, conf, c = bboxes[obj_id]
+                    if Box(x1, y1, x2, y2, 1.0, c, self.views[view_name], self.views[view_name], None, is_distorted=True).is_keep() == (self.region == 'region'):
+                        bbox_pred.append([x1, y1, x2, y2, conf, c])
+
+                if len(bbox_pred) == 0:
+                    bbox_pred = np.zeros((0, 6))
+                else:
+                    bbox_pred = np.array(bbox_pred)
+
+                predn = torch.as_tensor(bbox_pred).to(device)
+                ## filter the object out of region of the prediction
+            # pdb.set_trace()
+            stat["conf"] = predn[:, 4]
+            stat["pred_cls"] = predn[:, 5]
+            
+            # Evaluate
+            if nl:
+                stat["tp"] = self._process_batch(predn, bbox, cls)
+            if self.args.plots:
+                self.confusion_matrix.process_batch(predn, bbox, cls)
+            for k in self.stats.keys():
+                self.stats[k].append(stat[k])
+
+            # Save
+            if self.args.save_json:
+                self.pred_to_json(predn, batch["im_file"][si])
+            if self.args.save_txt:
+                self.save_one_txt(
+                    predn,
+                    self.args.save_conf,
+                    pbatch["ori_shape"],
+                    self.save_dir / "labels" / f"{Path(batch['im_file'][si]).stem}.txt",
+                )
 
 

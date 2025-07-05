@@ -81,10 +81,13 @@ class Box(object):
         new_box = views_projection.box_projection(self)
         return new_box
     
-    def is_keep(self, views_projections, view=MAIN_VIEW):
+    def is_keep(self):
+        cx, cy = self.cx, self.cy
+        polygon = self.source_view.polygon
+        return in_polygon((cx,cy), polygon)
         # assert self.source_view.name != view and self.view.name == view
-        views_projection = views_projections[f'({view},{self.source_view.name})']
-        return views_projection.keep_box(self)
+        # views_projection = views_projections[f'({view},{self.source_view.name})']
+        # return views_projection.keep_box(self)
 
 class Point(object):
     def __init__(self, x, y, cls_id, view, is_distorted=True):
@@ -517,8 +520,8 @@ class AssociationData(object):
             view_data = self.association_data[view.name]
             for box in view_data:
                 tmp.append(box.projection(views_projections))
-                flag = [x.is_keep(views_projections) for x in view_data]
-                if box.is_keep(views_projections):
+                flag = [x.is_keep() for x in view_data]
+                if box.is_keep():
                     main_view_data.append(box.projection(views_projections))
             # plot box on source view both original and anti_distorted image
         #     source_img = cv2.imread(box.image_path)
@@ -551,7 +554,7 @@ class AssociationData(object):
         # return canvas
         # pdb.set_trace() 
         # merge by the region
-        # keep_objects = [x for x in main_view_data if x.is_keep(views_projections)]
+        # keep_objects = [x for x in main_view_data if x.is_keep()]
         self.association_data[MAIN_VIEW] = main_view_data
 
 # grid_root = r'calibration_v1.json'

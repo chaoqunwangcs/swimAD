@@ -1,8 +1,0 @@
-path: /home/chaoqunwang/swimAD  
-train: data_transfer/yolo/dataset_v20250506_train_shuffle.txt  
-val: data_transfer/yolo/dataset_v20250506_val_shuffle.txt      
-
-names: 
-  0: ashore
-  1: above
-  2: under

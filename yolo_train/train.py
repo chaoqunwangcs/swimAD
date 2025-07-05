@@ -2,6 +2,7 @@ from ultralytics import YOLO
 from custom_dataset import CustomTrainer, CustomValidator
 import os
 import argparse
+import torch
 import pdb
 
 from pathlib import Path
@@ -30,14 +31,16 @@ def parse_arguments():
 if __name__ == '__main__':
 
     args = parse_arguments()
-    # pdb.set_trace()
     model = YOLO(args.ckpt)  
-    pdb.set_trace()
+    # debug. if the device id > 0 and only one device, it will used CUDA:0.
+    device = args.device
+    if len(args.device) == 1 and args.device != 0:
+        device = torch.device(int(args.device))
     results = model.train(
         trainer = CustomTrainer,
         cfg=args.cfg,                  
         name=args.name,
-        device=args.device, 
+        device=device, 
         batch=args.batch,
         workers=args.workers       
     )

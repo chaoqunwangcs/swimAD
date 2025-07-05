@@ -1,4 +1,4 @@
-data: cfgs/data_swimAD_v20250604_fold_0.yaml
+data: cfgs/data_swimAD_v20250623_shuffle.yaml
 task: 'detect'
 
 epochs: 250         

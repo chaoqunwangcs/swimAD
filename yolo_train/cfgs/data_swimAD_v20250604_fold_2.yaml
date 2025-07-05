@@ -1,8 +1,0 @@
-path: /home/chaoqunwang/swimAD  
-train: data_transfer/yolo/dataset_v20250604_folder_2_train.txt  
-val: data_transfer/yolo/dataset_v20250604_folder_2_val.txt      
-
-names: 
-  0: ashore
-  1: above
-  2: under

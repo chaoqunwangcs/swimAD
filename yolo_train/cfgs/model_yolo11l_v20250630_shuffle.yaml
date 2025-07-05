@@ -1,4 +1,4 @@
-data: cfgs/data_swimAD_v20250506.yaml
+data: cfgs/data_swimAD_v20250630_shuffle.yaml
 task: 'detect'
 
 epochs: 250         
@@ -10,4 +10,3 @@ pretrained: True
 seed: 42              
 deterministic: True   
 save_period: 30
-

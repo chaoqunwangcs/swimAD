@@ -1,6 +1,6 @@
 path: /home/chaoqunwang/swimAD  
-train: data_transfer/yolo/dataset_v20250604_train_no_domain_gap.txt  
-val: data_transfer/yolo/dataset_v20250604_val_no_domain_gap.txt      
+train: data_transfer/yolo/dataset_v20250604_no_domain_gap_train.txt  
+val: data_transfer/yolo/dataset_v20250604_no_domain_gap_val.txt      
 
 names: 
   0: ashore

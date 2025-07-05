@@ -21,6 +21,9 @@ MARGIN_HEIGHT = 300
 OVERLAP_WIDTH = 200
 OVERLAP_HEIGHT = 200
 
+CANVAS_WIDTH = POOL_WIDTH + MARGIN_WIDTH*2
+CANVAS_HEIGHT = POOL_HEIGHT + MARGIN_HEIGHT*2
+
 def in_polygon(point, polygon):
     x, y = point
     n = len(polygon)
@@ -532,8 +535,8 @@ class AssociationData(object):
         #         cv2.rectangle(anti_distorted_source_img, (int(box.x1), int(box.y1)), (int(box.x2), int(box.y2)), (0,255,0), 3)
         #         cv2.putText(anti_distorted_source_img, str(idx), (int(box.x1), int(box.y1)-20), cv2.FONT_HERSHEY_SIMPLEX, 3, (0,255,0), thickness=3)
 
-        #     main_view = np.zeros((3100, 2100, 3), dtype=np.uint8)
-        #     cv2.rectangle(main_view, (0,0), (2100, 3100), (0,255,0), 3)
+        #     main_view = np.zeros((CANVAS_HEIGHT, CANVAS_WIDTH, 3), dtype=np.uint8)
+        #     cv2.rectangle(main_view, (0,0), (CANVAS_WIDTH, CANVAS_HEIGHT), (0,255,0), 3)
         #     for idx, box in enumerate(tmp):
         #         cv2.rectangle(main_view, (int(box.x1), int(box.y1)), (int(box.x2), int(box.y2)), (0,255,0), 3)
         #         cv2.putText(main_view, str(flag[idx]), (int(box.x1), int(box.y1)-30), cv2.FONT_HERSHEY_SIMPLEX, 3, (0,255,0), thickness=3)
@@ -541,8 +544,8 @@ class AssociationData(object):
         #     main_view = cv2.resize(main_view, (int(main_view.shape[1]*(anti_distorted_source_img.shape[0]/main_view.shape[0])), anti_distorted_source_img.shape[0]),interpolation=cv2.INTER_LINEAR)
         #     img = np.hstack((anti_distorted_source_img, main_view))
         #     all_view_imgs.append(img)
-        # all_main_view = np.zeros((3100, 2100, 3), dtype=np.uint8)
-        # cv2.rectangle(all_main_view, (0,0), (2100, 3100), (0,255,0), 3)
+        # all_main_view = np.zeros((CANVAS_HEIGHT, CANVAS_WIDTH, 3), dtype=np.uint8)
+        # cv2.rectangle(all_main_view, (0,0), (CANVAS_WIDTH, CANVAS_HEIGHT), (0,255,0), 3)
         # for idx, box in enumerate(main_view_data):
         #     cv2.rectangle(all_main_view, (int(box.x1), int(box.y1)), (int(box.x2), int(box.y2)), (0,255,0), 3)
         #     cv2.putText(all_main_view, str(idx), (int(box.x1), int(box.y1)-30), cv2.FONT_HERSHEY_SIMPLEX, 3, (0,255,0), thickness=3)

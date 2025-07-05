@@ -61,18 +61,10 @@ from ultralytics.data.loaders import (
     autocast_list,
 )
 
-from boxmot.multi_view_association.test_stream_split import MultiViewAssociationStream
+from boxmot.multi_view_association.test_stream_split import MultiViewAssociationStream, POOL_WIDTH, POOL_HEIGHT, MARGIN_WIDTH, MARGIN_HEIGHT, MAIN_VIEW
 
 import pdb
 
-MAIN_VIEW = 'MAIN'
-HEIGHT = 1440
-WIDTH = 2560
-
-POOL_WIDTH = 1500
-POOL_HEIGHT = 2500
-MARGIN_WIDTH = 300
-MARGIN_HEIGHT = 300
 
 def plot_ids(
     result,

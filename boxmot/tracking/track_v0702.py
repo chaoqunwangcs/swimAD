@@ -11,7 +11,9 @@ import threading
 from functools import partial
 from pathlib import Path
 from typing import Any, Dict, List, Union
+from datetime import datetime
 import torch
+import json
 
 from boxmot import TRACKERS
 from boxmot.tracker_zoo import create_tracker
@@ -375,6 +377,7 @@ class MyDetectionPredictor(yolo.detect.DetectionPredictor):
             self.args.show = check_imshow(warn=True)
 
         # Usable if setup is done
+        self.object_map = {}
         self.model = None
         self.data = self.args.data  # data_dict
         self.imgsz = None
@@ -734,12 +737,12 @@ def on_predict_postprocess_end(predictor: object, persist: bool = False) -> None
     #     pdb.set_trace()
     # N * 6, x1, y1, x2, y2, conf, cls_id
     multi_view_det = predictor.associator.forward(dets)
-    object_map = dict()
+    frame_object_map = dict()
     for box in multi_view_det:
         box_xyxy = f'{int(box[0][0]):d}_{int(box[0][1]):d}_{int(box[0][2]):d}_{int(box[0][3]):d}'
-        object_map[box_xyxy] = (box[1], box[2])
-    # pdb.set_trace()
-    predictor.object_map = object_map
+        frame_object_map[box_xyxy] = (box[1], box[2])
+
+    predictor.object_map.update(frame_object_map)
     det = np.array([x[0] for x in multi_view_det])
     if len(multi_view_det) == 0:
         det = np.zeros((0, 6))
@@ -755,6 +758,7 @@ def on_predict_postprocess_end(predictor: object, persist: bool = False) -> None
     
     predictor.results.append(main_results)
     update_args = {"obb" if is_obb else "boxes": torch.as_tensor(det)}
+    
     predictor.results[-1].update(**update_args)
     # if len(tracks) > 0:
     #     idx = tracks[:, -1].astype(int)
@@ -812,6 +816,12 @@ def run(args):
     if args.save_video is not None:
         all_images = []
     
+    # used to save the log
+    save_results = {
+        'video_id': args.source,
+        'time_str': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        'frame_data': {}
+    }
     for idx, r in enumerate(results):
         if idx > 100:
             break
@@ -834,12 +844,31 @@ def run(args):
         cv2.putText(main_track, 'Track', (int(main_track.shape[1]/2.0-150), int(MARGIN_HEIGHT/1.5)), cv2.FONT_HERSHEY_SIMPLEX, 5, (255, 255, 255), thickness=5)
 
         # merge together
+        resize_factor = 0.5
         canvas = np.hstack((np.vstack((np.hstack((img_view1, img_view2)), np.hstack((img_view3, img_view4)))),main_det, main_track))
-        cv2.putText(canvas, f'{idx:05d}', ((canvas.shape[1]-600), int(MARGIN_HEIGHT/1.5)), cv2.FONT_HERSHEY_SIMPLEX, 5, (255, 255, 255), thickness=5)
-        canvas = cv2.resize(canvas, None, fx=0.5,fy=0.5, interpolation=cv2.INTER_LINEAR)
+        cv2.putText(canvas, f'{idx:04d}', ((canvas.shape[1]-600), int(MARGIN_HEIGHT/1.5)), cv2.FONT_HERSHEY_SIMPLEX, 5, (255, 255, 255), thickness=5)
+        canvas = cv2.resize(canvas, None, fx=resize_factor,fy=resize_factor, interpolation=cv2.INTER_LINEAR)
         
         # swim AD rules:
-        swimAD_results =  yolo.predictor.trackers[0].detect_AD_v2(yolo.predictor.object_map)
+        swimAD_results =  yolo.predictor.trackers[0].detect_AD_v2(yolo.predictor.object_map, args.metrics)
+
+        # remap the box to the saved video
+        for obj_id in swimAD_results.keys():
+            view = swimAD_results[obj_id]['view']
+            x1, y1 = swimAD_results[obj_id]['bbox_left_top']
+            x2, y2 = swimAD_results[obj_id]['bbox_right_bottom']
+            x1, y1, x2, y2 = x1 * resize_factor, y1 * resize_factor, x2 * resize_factor, y2 * resize_factor
+            new_img_width, new_img_height = r[0].orig_shape[1] * resize_factor, r[0].orig_shape[0] * resize_factor 
+            if view == '2':
+                x1, x2 = x1 + new_img_width, x2 + new_img_width
+            if view == '3':
+                y1, y2 = y1 + new_img_height, y2 + new_img_height
+            if view == '4':
+                x1, y1, x2, y2 = x1 + new_img_width, y1 + new_img_height, x2 + new_img_width, y2 + new_img_height
+            swimAD_results[obj_id]['bbox_left_top'] = [x1, y1]
+            swimAD_results[obj_id]['bbox_right_bottom'] = [x2, y2]
+
+        save_results['frame_data'][f"{idx:04d}"] = swimAD_results
 
         if args.save:
             root = os.path.join('runs', yolo.predictor.args.name)
@@ -856,6 +885,11 @@ def run(args):
             if key == ord(' ') or key == ord('q'):
                 break
     
+
+    with open(args.log_path, "w", encoding="utf-8") as file:
+        json.dump(save_results, file, ensure_ascii=False, indent=4)
+        print(f'Finish saving log to {args.log_path}')
+
     if args.save_video is not None:
         root = os.path.join('runs', yolo.predictor.args.name)
         os.makedirs(root, exist_ok=True)
@@ -898,7 +932,11 @@ def parse_opt():
     parser.add_argument('--save-video', action='store_true',
                         help='save video tracking results in .mp4 format')
     parser.add_argument('--calibration', default='boxmot/multi_view_association/region_calibration_data_v1.json',
-                        help='the annotated calibration file, used for multi view association')
+                        help='the annotated calibration file, used for multi view association')           
+    parser.add_argument('--metrics', type=str, default='min_dist,max_dist,class_label',
+                        help='the metrics used for AD detection in the swimming pool')
+    parser.add_argument('--log-path', type=str, default='log.json',
+                        help='the path to save the tracking log')
 
     # class 0 is person, 1 is bycicle, 2 is car... 79 is oven
     parser.add_argument('--classes', nargs='+', type=int,
@@ -938,4 +976,5 @@ def parse_opt():
 
 if __name__ == "__main__":
     opt = parse_opt()
+    opt.metrics = opt.metrics.split(',')
     run(opt)

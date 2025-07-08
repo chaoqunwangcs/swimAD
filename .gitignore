@@ -23,6 +23,7 @@ logs/
 boxmot/runs/
 boxmot/tmp
 boxmot/*.jpg
+boxmot/log.json
 boxmot/boxmot/multi_view_association/tmp
 boxmot/boxmot/multi_view_association/*.jpg
 boxmot/boxmot/logs/

@@ -11,6 +11,44 @@ class BaseRules(ABC):
     def __init__(self):
         pass
 
+    def min_dist(self, history_observations, track_id):
+        if len(history_observations) == 1:
+            return 0
+        else:
+            data = np.stack([x for x in history_observations])
+            midpoints = np.mean(data[:,:4].reshape(data.shape[0], 2, 2), axis=1)
+            distances = np.sqrt(np.sum((midpoints[:, np.newaxis] - midpoints)**2, axis=2))
+            return np.min(distances)
+    
+    def max_dist(self, history_observations, track_id):
+        if len(history_observations) == 1:
+            return 0
+        else:
+            data = np.stack([x for x in history_observations])
+            midpoints = np.mean(data[:,:4].reshape(data.shape[0], 2, 2), axis=1)
+            distances = np.sqrt(np.sum((midpoints[:, np.newaxis] - midpoints)**2, axis=2))
+            return np.max(distances)
+    
+    def class_label(self, history_observations, track_id):
+        return int(history_observations[-1][-1])
+    
+    def move_dist(self, history_observations, track_id):
+        pass     
+
+    def avg_scale(self, history_observations, track_id):
+        pass
+
+    def condition_A_triggered(self, history_observations, track_id):
+        pass
+
+    def condition_B_triggered(self, history_observations, track_id):
+        pass
+
+    def final_ema_magnitude(self, history_observations, track_id):
+        pass
+
+
+
     def calc_dist(self, box1, box2):
         center1 = np.array([(box1[0] + box1[2]) / 2, (box1[1] + box1[3]) / 2])
         center2 = np.array([(box2[0] + box2[2]) / 2, (box2[1] + box2[3]) / 2]) 

@@ -703,30 +703,26 @@ class BaseTracker(BaseRules):
                 
         return img
 
-    def detect_AD_v2(self, object_map) -> list[np.ndarray]:
+    def detect_AD_v2(self, object_map, metrics=[]) -> list[np.ndarray]:
         """
         detect the AD swimmer with rules, all the rules function is named as rule+num num~[1,99]        
         """
-        pdb.set_trace()
-        AD_list = []
-        info_list = []
-        # pdb.set_trace()
+        
+        results = dict()
         for a in self.active_tracks:
             match_rules = []
             if a.history_observations:
-                for i in range(1, 99):
-                    rule_name = f"rule{i}"
-                    if hasattr(self, rule_name):
-                        func = getattr(self, rule_name)
-                        flag, info = func(a.history_observations, a.id)
-                        info_list.append({f"rule{i}":info})
-                        if flag:
-                            match_rules.append(rule_name)
-                
-                if len(match_rules) > 0:
-                    rules = " ".join(match_rules)
-                    AD_list.append([a, rules])
+                box = a.history_observations[-1][:4]
+                box_xyxy = f'{int(box[0]):d}_{int(box[1]):d}_{int(box[2]):d}_{int(box[3]):d}'
+                assert box_xyxy in object_map
+                result = {'view': object_map[box_xyxy][0], 
+                        'bbox_left_top': [object_map[box_xyxy][1][0], object_map[box_xyxy][1][1]], 
+                        'bbox_right_bottom': [object_map[box_xyxy][1][2], object_map[box_xyxy][1][3]]}
+                for metric in metrics:
+                    assert hasattr(self, metric), f"The {metric} is not implemented."
+                    func = getattr(self, metric)
+                    value = func(a.history_observations, a.id)
+                    result[f'{metric}'] = value
+                results[f'obj{a.id}'] = result
 
-        # if len(AD_list) > 0:
-        #     pdb.set_trace()  
-        return AD_list, info_list
+        return results

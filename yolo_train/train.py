@@ -37,6 +37,7 @@ if __name__ == '__main__':
     device = args.device
     if len(args.device) == 1 and args.device != 0:
         device = torch.device(int(args.device))
+    pdb.set_trace()
     results = model.train(
         trainer = CustomTrainer,
         cfg=args.cfg,                  

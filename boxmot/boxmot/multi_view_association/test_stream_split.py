@@ -432,7 +432,7 @@ class MultiViewAssociationStream(object):
         
         association_data.associate(self.views_projections)
         
-        return [x.data() for x in association_data.association_data[self.main_view.name]]
+        return [[x[0].data(), x[1], x[2]] for x in association_data.association_data[self.main_view.name]]
 
 class Drawer(object):
     def __init__(self, w, h, path):
@@ -525,7 +525,7 @@ class AssociationData(object):
                 tmp.append(box.projection(views_projections))
                 flag = [x.is_keep() for x in view_data]
                 if box.is_keep():
-                    main_view_data.append(box.projection(views_projections))
+                    main_view_data.append([box.projection(views_projections), view.name, (box.original_x1, box.original_y1, box.original_x2, box.original_y2)])
             # plot box on source view both original and anti_distorted image
         #     source_img = cv2.imread(box.image_path)
         #     anti_distorted_source_img = view.anti_distortion(source_img)

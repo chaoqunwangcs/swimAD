@@ -702,3 +702,31 @@ class BaseTracker(BaseRules):
                         img = self.plot_trackers_trajectories(img, a.history_observations, a.id)
                 
         return img
+
+    def detect_AD_v2(self, object_map) -> list[np.ndarray]:
+        """
+        detect the AD swimmer with rules, all the rules function is named as rule+num num~[1,99]        
+        """
+        pdb.set_trace()
+        AD_list = []
+        info_list = []
+        # pdb.set_trace()
+        for a in self.active_tracks:
+            match_rules = []
+            if a.history_observations:
+                for i in range(1, 99):
+                    rule_name = f"rule{i}"
+                    if hasattr(self, rule_name):
+                        func = getattr(self, rule_name)
+                        flag, info = func(a.history_observations, a.id)
+                        info_list.append({f"rule{i}":info})
+                        if flag:
+                            match_rules.append(rule_name)
+                
+                if len(match_rules) > 0:
+                    rules = " ".join(match_rules)
+                    AD_list.append([a, rules])
+
+        # if len(AD_list) > 0:
+        #     pdb.set_trace()  
+        return AD_list, info_list

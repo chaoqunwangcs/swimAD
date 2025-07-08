@@ -734,7 +734,13 @@ def on_predict_postprocess_end(predictor: object, persist: bool = False) -> None
     #     pdb.set_trace()
     # N * 6, x1, y1, x2, y2, conf, cls_id
     multi_view_det = predictor.associator.forward(dets)
-    det = np.array(multi_view_det)
+    object_map = dict()
+    for box in multi_view_det:
+        box_xyxy = f'{int(box[0][0]):d}_{int(box[0][1]):d}_{int(box[0][2]):d}_{int(box[0][3]):d}'
+        object_map[box_xyxy] = (box[1], box[2])
+    # pdb.set_trace()
+    predictor.object_map = object_map
+    det = np.array([x[0] for x in multi_view_det])
     if len(multi_view_det) == 0:
         det = np.zeros((0, 6))
     main_results = Results(
@@ -832,6 +838,9 @@ def run(args):
         cv2.putText(canvas, f'{idx:05d}', ((canvas.shape[1]-600), int(MARGIN_HEIGHT/1.5)), cv2.FONT_HERSHEY_SIMPLEX, 5, (255, 255, 255), thickness=5)
         canvas = cv2.resize(canvas, None, fx=0.5,fy=0.5, interpolation=cv2.INTER_LINEAR)
         
+        # swim AD rules:
+        swimAD_results =  yolo.predictor.trackers[0].detect_AD_v2(yolo.predictor.object_map)
+
         if args.save:
             root = os.path.join('runs', yolo.predictor.args.name)
             os.makedirs(root, exist_ok=True)

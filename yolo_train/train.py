@@ -31,6 +31,7 @@ def parse_arguments():
 if __name__ == '__main__':
 
     args = parse_arguments()
+    # pdb.set_trace()
     model = YOLO(args.ckpt)  
     # debug. if the device id > 0 and only one device, it will used CUDA:0.
     device = args.device

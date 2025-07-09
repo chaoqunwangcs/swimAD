@@ -1,4 +1,23 @@
+
+
+
+
 ### 文件操作指令
+
+#### **用于数据增强的crop.py**
+
+- 默认的输出路径为与输入路径同地址
+
+```
+eg1:
+python crop.py -i ./afternoon_v1
+
+
+```
+
+
+
+
 
 #### coco_eval.py
 

@@ -8,23 +8,31 @@ import numpy as np
 import pdb
 
 class BaseRules(ABC):
+    Window_Size = 10
+    
     def __init__(self):
         pass
 
     def min_dist(self, history_observations, track_id):
+        """window_size下的各点间最小欧氏距离"""
         if len(history_observations) == 1:
             return 0
         else:
-            data = np.stack([x for x in history_observations])
+            obs = list(history_observations)
+            window = obs[-self.Window_Size:]
+            data = np.stack(window)
             midpoints = np.mean(data[:,:4].reshape(data.shape[0], 2, 2), axis=1)
             distances = np.sqrt(np.sum((midpoints[:, np.newaxis] - midpoints)**2, axis=2))
             return np.min(distances)
     
     def max_dist(self, history_observations, track_id):
+        """window_size下的各点间最大欧氏距离"""
         if len(history_observations) == 1:
             return 0
         else:
-            data = np.stack([x for x in history_observations])
+            obs = list(history_observations)
+            window = obs[-self.Window_Size:]
+            data = np.stack(window)
             midpoints = np.mean(data[:,:4].reshape(data.shape[0], 2, 2), axis=1)
             distances = np.sqrt(np.sum((midpoints[:, np.newaxis] - midpoints)**2, axis=2))
             return np.max(distances)
@@ -32,11 +40,55 @@ class BaseRules(ABC):
     def class_label(self, history_observations, track_id):
         return int(history_observations[-1][-1])
     
+    def costheta(self, history_observations, track_id):
+        """方向一致性的cosθ指标,计算box最近两帧之间的cos值"""
+        if len(history_observations) < 3:
+            return 0
+        else:
+            obs = list(history_observations)
+            window = obs[-self.Window_Size:]
+            centers = np.array([[(x[0]+x[2])/2, (x[1]+x[3])/2] for x in window])
+            vecs = centers[1:] - centers[:-1]    # shape=(N-1,2) 计算相邻帧之间的位移向量
+            v_prev, v_cur = vecs[-2], vecs[-1] #  只取最后两段向量
+            
+            dot = float(np.dot(v_prev, v_cur))#  点积
+            norm_val = float(np.linalg.norm(v_prev) * np.linalg.norm(v_cur))#模长
+            if norm_val <= 1e-6:
+                return 0.0
+        cos_val = dot / norm_val       
+        return float(np.clip(cos_val, -1.0, 1.0))# 裁剪到 [-1,1] 并返回单个值
+        '''
+        v_prev, v_cur = vecs[:-1], vecs[1:]
+        dot = np.sum(v_prev * v_cur, axis=1) #点积
+        norm = np.linalg.norm(v_prev, axis=1) * np.linalg.norm(v_cur, axis=1)#模长
+        cos = np.ones_like(dot)# 计算余弦值
+        valid = norm > 1e-6
+        cos[valid] = dot[valid] / norm[valid]
+        #return np.clip(cos, -1.0, 1.0).tolist() #  裁剪到[-1,1]并返回列表               
+        '''
+        
+    
     def move_dist(self, history_observations, track_id):
-        pass     
+        """window_size下的最后两帧中心点移动距离"""
+        if len(history_observations) == 1:
+            return 0
+        else:
+            obs = list(history_observations)
+            window = obs[-self.Window_Size:]
+            b1, b2 = window[-2][:4], window[-1][:4]
+            c1 = np.array([(b1[0] + b1[2]) / 2.0, (b1[1] + b1[3]) / 2.0])
+            c2 = np.array([(b2[0] + b2[2]) / 2.0, (b2[1] + b2[3]) / 2.0])
+            return float(np.linalg.norm(c2 - c1))    
 
     def avg_scale(self, history_observations, track_id):
-        pass
+        """滑窗内平均检测框大小：(w+h)/2 平均值"""
+        if len(history_observations) == 1:
+            return 0
+        else:            
+            obs = list(history_observations)
+            window = obs[-self.Window_Size:]
+            scales = [((x[2]-x[0])+(x[3]-x[1]))/2.0 for x in window]
+            return float(np.mean(scales)) if scales else 0.0
 
     def condition_A_triggered(self, history_observations, track_id):
         pass

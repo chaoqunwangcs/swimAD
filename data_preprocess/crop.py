@@ -199,26 +199,42 @@ class RegionCropper:
         output_path.mkdir(parents=True, exist_ok=True)
         print(f"输出目录: {output_path}")
         
-        # 查找机位文件夹
-        camera_folders = {}
-        for item in input_path.iterdir():
-            if item.is_dir() and item.name in ['1', '2', '3', '4']:
-                camera_folders[item.name] = item
+        # 遍历输入目录下的所有子文件夹
+        processed_folders = 0
+        for sub_folder in input_path.iterdir():
+            if not sub_folder.is_dir():
+                continue
+            
+            print(f"\n处理文件夹: {sub_folder.name}")
+            
+            # 在每个子文件夹中查找机位文件夹
+            camera_folders = {}
+            for item in sub_folder.iterdir():
+                if item.is_dir() and item.name in ['1', '2', '3', '4']:
+                    camera_folders[item.name] = item
+            
+            if not camera_folders:
+                print(f"  警告: 在文件夹 {sub_folder.name} 中未找到机位文件夹 (1, 2, 3, 4)")
+                continue
+            
+            # 创建对应的输出子文件夹
+            output_sub_folder = output_path / sub_folder.name
+            
+            # 处理每个机位
+            for camera_id, folder_path in camera_folders.items():
+                output_camera_folder = output_sub_folder / camera_id
+                self.process_camera_folder(
+                    str(folder_path),
+                    str(output_camera_folder),
+                    camera_id
+                )
+            
+            processed_folders += 1
         
-        if not camera_folders:
-            print("警告: 未找到机位文件夹 (1, 2, 3, 4)")
-            return
-        
-        # 处理每个机位
-        for camera_id, folder_path in camera_folders.items():
-            output_camera_folder = output_path / camera_id
-            self.process_camera_folder(
-                str(folder_path),
-                str(output_camera_folder),
-                camera_id
-            )
-        
-        print(f"\n处理完成! 结果保存在: {output_dir}")
+        if processed_folders == 0:
+            print("警告: 未找到任何包含机位文件夹的子目录")
+        else:
+            print(f"\n处理完成! 共处理了 {processed_folders} 个文件夹，结果保存在: {output_path}")
 
 
 def main():

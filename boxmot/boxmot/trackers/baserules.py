@@ -8,22 +8,22 @@ import numpy as np
 import pdb
 
 class BaseRules(ABC):
-    Window_Size = 10
+    Window_Size = 50
     
     def __init__(self):
         pass
 
     def min_dist(self, history_observations, track_id):
         """window_size下的各点间最小欧氏距离"""
-        if len(history_observations) == 1:
+        if len(history_observations) < 2:
             return 0
         else:
-            obs = list(history_observations)
-            window = obs[-self.Window_Size:]
-            data = np.stack(window)
+            obs = list(history_observations)[-self.Window_Size:]
+            data = np.stack(obs)
             midpoints = np.mean(data[:,:4].reshape(data.shape[0], 2, 2), axis=1)
             distances = np.sqrt(np.sum((midpoints[:, np.newaxis] - midpoints)**2, axis=2))
-            return np.min(distances)
+            np.fill_diagonal(distances,np.inf)# 把对角线（自身距离）变成 +inf
+            return float(np.min(distances))# 取非自身的最小值
     
     def max_dist(self, history_observations, track_id):
         """window_size下的各点间最大欧氏距离"""

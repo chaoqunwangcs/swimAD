@@ -48,6 +48,7 @@ class BaseTracker(BaseRules):
         self.asso_func_name = asso_func+"_obb" if is_obb else asso_func
         self.is_obb = is_obb
         
+        self.window_size = 10
         self.frame_count = 0
         self.active_tracks = []  # This might be handled differently in derived classes
         self.per_class_active_tracks = None

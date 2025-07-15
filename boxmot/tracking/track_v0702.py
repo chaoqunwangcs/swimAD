@@ -813,7 +813,7 @@ def run(args):
     # store custom args in predictor
     yolo.predictor.custom_args = args
 
-    if args.save_video is not None:
+    if args.save_video:
         all_images = []
     
     # used to save the log
@@ -849,6 +849,7 @@ def run(args):
         cv2.putText(canvas, f'{idx:04d}', ((canvas.shape[1]-600), int(MARGIN_HEIGHT/1.5)), cv2.FONT_HERSHEY_SIMPLEX, 5, (255, 255, 255), thickness=5)
         canvas = cv2.resize(canvas, None, fx=resize_factor,fy=resize_factor, interpolation=cv2.INTER_LINEAR)
         
+        # pdb.set_trace()
         # swim AD rules:
         swimAD_results =  yolo.predictor.trackers[0].detect_AD_v2(yolo.predictor.object_map, args.metrics)
 
@@ -865,6 +866,10 @@ def run(args):
                 y1, y2 = y1 + new_img_height, y2 + new_img_height
             if view == '4':
                 x1, y1, x2, y2 = x1 + new_img_width, y1 + new_img_height, x2 + new_img_width, y2 + new_img_height
+            if x1 > 2560 or x2 > 2560:
+                pdb.set_trace()
+            if y1 > 1440 or y2 > 1440:
+                pdb.set_trace()
             swimAD_results[obj_id]['bbox_left_top'] = [x1, y1]
             swimAD_results[obj_id]['bbox_right_bottom'] = [x2, y2]
 
@@ -876,7 +881,7 @@ def run(args):
             cv2.imwrite(os.path.join(root, f'img_{idx:05d}.jpg'), canvas)
             # pdb.set_trace()
 
-        if args.save_video is not None:
+        if args.save_video:
             all_images.append(canvas)
 
         if args.show is True:
@@ -890,7 +895,7 @@ def run(args):
         json.dump(save_results, file, ensure_ascii=False, indent=4)
         print(f'Finish saving log to {args.log_path}')
 
-    if args.save_video is not None:
+    if args.save_video:
         root = os.path.join('runs', yolo.predictor.args.name)
         os.makedirs(root, exist_ok=True)
         video_path = os.path.join(root, 'video.mp4')

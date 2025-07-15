@@ -165,6 +165,18 @@ class View(object):
     def set_region(self):
         # self.polygon = [list(map(int, self.grid_info[0][0])), list(map(int, self.grid_info[0][1])), list(map(int, self.grid_info[1][1])), list(map(int, self.grid_info[1][0]))] #clockwise
         if self.name == '1':
+            self.polygon = [[152, 600], [564, 532], [1558, 823], [740, 1294]]
+        elif self.name == '2':
+            self.polygon = [[1587, 434], [2216, 530], [1297, 1372], [436, 776]]
+        elif self.name == '3':
+            self.polygon = [[289, 555], [745, 499], [1931, 882], [866, 1405]]
+        elif self.name == '4':
+            self.polygon = [[1384, 498], [1976, 553], [1315, 1424], [307, 844]]
+        self.polygon_array = np.array(self.polygon)
+        
+        """
+        初版参数，存在overlap
+                if self.name == '1':
             self.polygon = [[143, 577], [543, 522], [1558, 823], [740, 1294]]
         elif self.name == '2':
             self.polygon = [[1625, 416], [2240, 489], [1297, 1372], [436, 776]]
@@ -173,6 +185,7 @@ class View(object):
         elif self.name == '4':
             self.polygon = [[1384, 498], [1976, 553], [1315, 1424], [307, 844]]
         self.polygon_array = np.array(self.polygon)
+        """
 
     def anti_distortion(self, image):
         image = cv2.remap(image, self.mapx, self.mapy, cv2.INTER_LINEAR)
@@ -289,6 +302,8 @@ class ViewAssociation(object):
             source_points = [[1152, 1272], [2072, 400], [217, 667], [1456, 381]]
         else:
             raise NotImplementedError('Not support this view {self.source_view.name}!')
+        
+  
 
         self.homography_matrix, _ = cv2.findHomography(np.array(source_points), np.array(target_points))
 

@@ -472,7 +472,7 @@ class CustomValidator(DetectionValidator):
         self.class_map = None
         self.args.task = "detect"
         self.metrics = DetMetrics(save_dir=self.save_dir)
-        self.iouv = torch.linspace(0.5, 0.95, 10)  # IoU vector for mAP@0.5:0.95
+        self.iouv = torch.linspace(0.1, 0.95, 18)  # IoU vector for mAP@0.5:0.95
         self.niou = self.iouv.numel()
         self.lb = []  # for autolabelling
         self.region = region
@@ -482,6 +482,30 @@ class CustomValidator(DetectionValidator):
                 "WARNING ⚠️ 'save_hybrid=True' will cause incorrect mAP.\n"
             )
         self.init_views()
+
+    def get_desc(self):
+        """Return a formatted string summarizing class metrics of YOLO model."""
+        return ("%22s" + "%11s" * 10) % ("Class", "Images", "Instances", "Box(P", "R", "mAP10", "mAP20", "mAP30", "mAP40", "mAP50", "mAP50-95)")
+
+    def print_results(self):
+        """Print training/validation set metrics per class."""
+        pf = "%22s" + "%11i" * 2 + "%11.3g" * (len(self.metrics.keys) + 4)  # print format
+        LOGGER.info(pf % ("all", self.seen, self.nt_per_class.sum(), *[self.metrics.box.mp, self.metrics.box.mr, self.metrics.box.all_ap[:,0].mean(), self.metrics.box.all_ap[:,2].mean(), self.metrics.box.all_ap[:,4].mean(), self.metrics.box.all_ap[:,6].mean(), self.metrics.box.all_ap[:,8].mean(), self.metrics.box.all_ap[:,8:].mean()]))
+        if self.nt_per_class.sum() == 0:
+            LOGGER.warning(f"WARNING ⚠️ no labels found in {self.args.task} set, can not compute metrics without labels")
+
+        # Print results per class
+        if self.args.verbose and not self.training and self.nc > 1 and len(self.stats):
+            for i, c in enumerate(self.metrics.ap_class_index):
+                LOGGER.info(
+                    pf % (self.names[c], self.nt_per_image[c], self.nt_per_class[c], *[self.metrics.box.p[i], self.metrics.box.r[i],  self.metrics.box.all_ap[:,0][i], self.metrics.box.all_ap[:,2][i], self.metrics.box.all_ap[:,4][i], self.metrics.box.all_ap[:,6][i], self.metrics.box.all_ap[:,8][i], self.metrics.box.all_ap[:,8:].mean(1)[i]])
+                )
+
+        if self.args.plots:
+            for normalize in True, False:
+                self.confusion_matrix.plot(
+                    save_dir=self.save_dir, names=self.names.values(), normalize=normalize, on_plot=self.on_plot
+                )
 
     def init_views(self):
         view1 = View('1', p1=0, p2=0, k1=-0.5353, k2=0.2875, k3=-0.0906, fx=1621.9, fy=1856.1, cx=1116.3, cy=742.9178, fx_ratio=1.33, fy_ratio=1.33, grid_info=None)

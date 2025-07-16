@@ -812,9 +812,12 @@ def run(args):
     yolo.add_callback('on_predict_postprocess_end', partial(on_predict_postprocess_end, persist=False))
     # store custom args in predictor
     yolo.predictor.custom_args = args
+<<<<<<< HEAD
 
     if args.save_video:
         all_images = []
+=======
+>>>>>>> cee22a5bc8daae733e29d86659c8d56ebdbc1600
     
     # used to save the log
     save_results = {
@@ -822,9 +825,22 @@ def run(args):
         'time_str': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         'frame_data': {}
     }
-    for idx, r in enumerate(results):
-        if idx > 100:
-            break
+    
+    if args.imgsz is None:
+        args.imgsz = default_imgsz(args.yolo_model)
+        
+    root = os.path.join('runs', yolo.predictor.args.name)
+    os.makedirs(root, exist_ok=True)
+    out = None
+    if args.save_video:
+        video_path = os.path.join(root, 'video.mp4')
+        fourcc = cv2.VideoWriter_fourcc(*'H264')
+        fps = 10
+
+    for idx, r in enumerate(results):        
+
+        #if idx > 100:
+        #    break
         # each view det result
         img_view1 = plot_ids(r[0], line_width=yolo.predictor.args.line_width,boxes=yolo.predictor.args.show_boxes,conf=yolo.predictor.args.show_conf,labels=yolo.predictor.args.show_labels,im_gpu=r[0].orig_img)
         img_view2 = plot_ids(r[1], line_width=yolo.predictor.args.line_width,boxes=yolo.predictor.args.show_boxes,conf=yolo.predictor.args.show_conf,labels=yolo.predictor.args.show_labels,im_gpu=r[1].orig_img)
@@ -878,24 +894,46 @@ def run(args):
         if args.save:
             root = os.path.join('runs', yolo.predictor.args.name)
             os.makedirs(root, exist_ok=True)
-            cv2.imwrite(os.path.join(root, f'img_{idx:05d}.jpg'), canvas)
+            # 改为保存为 webp 并指定质量（0-100）
+            cv2.imwrite(
+               os.path.join(root, f'img_{idx:05d}.webp'),
+               canvas,
+               [int(cv2.IMWRITE_WEBP_QUALITY), 95]
+           )
+            #cv2.imwrite(os.path.join(root, f'img_{idx:05d}.jpg'), canvas)
             # pdb.set_trace()
 
         if args.save_video:
+<<<<<<< HEAD
             all_images.append(canvas)
+=======
+            if out is None:
+                h, w = canvas.shape[:2]
+                out = cv2.VideoWriter(video_path, fourcc, fps, (w, h))
+            out.write(canvas)
+>>>>>>> cee22a5bc8daae733e29d86659c8d56ebdbc1600
 
         if args.show is True:
             cv2.imshow('BoxMOT', canvas)     
             key = cv2.waitKey(1) & 0xFF
             if key == ord(' ') or key == ord('q'):
                 break
-    
+            
+        # loop 结束后释放
+    if out:
+        out.release()
+        print(f"Finish saving video to {video_path}.")
 
     with open(args.log_path, "w", encoding="utf-8") as file:
         json.dump(save_results, file, ensure_ascii=False, indent=4)
         print(f'Finish saving log to {args.log_path}')
 
+<<<<<<< HEAD
     if args.save_video:
+=======
+'''
+    if args.save_video is not None:
+>>>>>>> cee22a5bc8daae733e29d86659c8d56ebdbc1600
         root = os.path.join('runs', yolo.predictor.args.name)
         os.makedirs(root, exist_ok=True)
         video_path = os.path.join(root, 'video.mp4')
@@ -908,6 +946,8 @@ def run(args):
             out.write(img)
         out.release()
         print(f"Finish saving video to {video_path}.")
+'''
+
 
 
 

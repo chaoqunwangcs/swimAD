@@ -1,5 +1,5 @@
 # Mikel Broström 🔥 Yolo Tracking 🧾 AGPL-3.0 license
-
+import math
 import os
 import argparse
 import cv2
@@ -15,6 +15,9 @@ from datetime import datetime
 import torch
 import json
 
+from ultralytics.data.augment import classify_transforms
+from ultralytics.engine.predictor import STREAM_WARNING
+
 from boxmot import TRACKERS
 from boxmot.tracker_zoo import create_tracker
 from boxmot.utils import ROOT, WEIGHTS, TRACKER_CONFIGS
@@ -29,9 +32,9 @@ from ultralytics import YOLO
 from ultralytics.models import yolo
 from ultralytics.cfg import get_cfg, get_save_dir
 from ultralytics.utils.plotting import Annotator, colors
-from ultralytics.data.utils import VID_FORMATS
+from ultralytics.data.utils import VID_FORMATS, FORMATS_HELP_MSG
 from ultralytics.utils.plotting import save_one_box
-from ultralytics.utils.checks import check_imgsz, check_imshow
+from ultralytics.utils.checks import check_imgsz, check_imshow, check_requirements
 from ultralytics.engine.results import Results
 from ultralytics.utils.torch_utils import smart_inference_mode
 from ultralytics.utils import DEFAULT_CFG, LOGGER, MACOS, WINDOWS, callbacks, colorstr, ops
@@ -245,7 +248,7 @@ class LoadMultiViewImagesAndVideos:
         self.bs = batch
         self.cap = None
         if self.nf == 0:
-            raise FileNotFoundError(f"No images or videos found in {p}. {FORMATS_HELP_MSG}")
+            raise FileNotFoundError(f"No images or videos found in {path}. {FORMATS_HELP_MSG}")
 
     def __iter__(self):
         """Iterates through image/video files, yielding source paths, images, and metadata."""
@@ -812,12 +815,9 @@ def run(args):
     yolo.add_callback('on_predict_postprocess_end', partial(on_predict_postprocess_end, persist=False))
     # store custom args in predictor
     yolo.predictor.custom_args = args
-<<<<<<< HEAD
 
     if args.save_video:
         all_images = []
-=======
->>>>>>> cee22a5bc8daae733e29d86659c8d56ebdbc1600
     
     # used to save the log
     save_results = {
@@ -904,15 +904,11 @@ def run(args):
             # pdb.set_trace()
 
         if args.save_video:
-<<<<<<< HEAD
             all_images.append(canvas)
-=======
             if out is None:
                 h, w = canvas.shape[:2]
                 out = cv2.VideoWriter(video_path, fourcc, fps, (w, h))
             out.write(canvas)
->>>>>>> cee22a5bc8daae733e29d86659c8d56ebdbc1600
-
         if args.show is True:
             cv2.imshow('BoxMOT', canvas)     
             key = cv2.waitKey(1) & 0xFF
@@ -928,12 +924,7 @@ def run(args):
         json.dump(save_results, file, ensure_ascii=False, indent=4)
         print(f'Finish saving log to {args.log_path}')
 
-<<<<<<< HEAD
-    if args.save_video:
-=======
-'''
     if args.save_video is not None:
->>>>>>> cee22a5bc8daae733e29d86659c8d56ebdbc1600
         root = os.path.join('runs', yolo.predictor.args.name)
         os.makedirs(root, exist_ok=True)
         video_path = os.path.join(root, 'video.mp4')
@@ -946,7 +937,6 @@ def run(args):
             out.write(img)
         out.release()
         print(f"Finish saving video to {video_path}.")
-'''
 
 
 

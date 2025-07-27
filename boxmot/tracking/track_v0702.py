@@ -18,7 +18,9 @@ import json
 import logging
 
 from tracking.detection_entry import DetectionEntry
+from tracking.drowning_detector import DrowningDetector
 from tracking.track_lifecycle import TrackManagerController
+from tracking.track_window_manager import TrackWindowManager
 
 logger = logging.getLogger(__name__)
 
@@ -795,7 +797,42 @@ def on_predict_postprocess_end(predictor: Union[object, MyDetectionPredictor], p
     for entry in entries:
         logger.debug(f"[Entry] key={entry.key()}, track_id={entry.track_id}")
         if entry.track_id:
-            track_manager.update(entry.track_id, entry, frame_index=frame_index)
+            g_track_manager.update(entry.track_id, entry, frame_index=frame_index)
+
+    # 检测异常轨迹
+    # TODO: 发出警告
+    check_drowning_alerts(g_track_manager)
+
+
+def check_drowning_alerts(track_manager) -> None:
+    """
+    执行溺水检测并使用结构化日志输出，仅对异常轨迹进行记录。
+    """
+    detector = DrowningDetector(use_original_bbox=True)
+    abnormal = track_manager.detect_abnormal_tracks(detector.as_hook_fn())
+
+    for track_id, result in abnormal.items():
+        if not result or not result.get("alarm", default=False):
+            continue
+        logger.warning(f"[ALARM] Track {track_id} triggered drowning alert:")
+        for rule in result.get("triggered_rules", []):
+            rule_id = rule["rule_id"]
+            rule_name = rule["rule_name"]
+            value = rule["value"]
+            value_str = _format_rule_value(value)
+            logger.warning(f"{track_id} - [{rule_id}] {rule_name} -> {value_str}")
+        # TODO: 一个广播式的异常通知接口
+
+
+def _format_rule_value(value) -> str:
+    """
+    结构化格式化规则值（支持 float, list/tuple, 其他类型）
+    """
+    if isinstance(value, (tuple, list)):
+        return "(" + ", ".join(f"{v:.2f}" if isinstance(v, float) else str(v) for v in value) + ")"
+    if isinstance(value, float):
+        return f"{value:.2f}"
+    return str(value)
 
 
 def extract_detections_by_view(predictor: MyDetectionPredictor, is_obb: bool) -> List[Dict[str, Any]]:
@@ -1260,6 +1297,6 @@ def parse_opt():
 if __name__ == "__main__":
     opt = parse_opt()
     opt.metrics = opt.metrics.split(',')
-    track_controller = TrackManagerController(ttl=10, snapshot_interval=30,frame_window_span=30)
-    track_manager = track_controller.manager
+    track_controller = TrackManagerController(ttl=10, snapshot_interval=30, frame_window_span=30)
+    g_track_manager = track_controller.manager
     run(opt)

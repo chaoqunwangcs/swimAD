@@ -11,11 +11,14 @@ import numpy as np
 import threading
 from functools import partial
 from pathlib import Path
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Union, Tuple, Optional
 from datetime import datetime
 import torch
 import json
 import logging
+
+from tracking.detection_entry import DetectionEntry
+from tracking.track_lifecycle import TrackManagerController
 
 logger = logging.getLogger(__name__)
 
@@ -725,45 +728,6 @@ def on_predict_start(predictor, persist=False):
     predictor.trackers = trackers
 
 
-class DetectionEntry:
-    def __init__(self, box_data, track_id_str, original_bbox):
-        """
-        box_data:       List[float] = [x1, y1, x2, y2, conf, cls_id]
-        track_id_str:   str         = 视角名 (临时充当 track_id)
-        original_bbox:  Tuple[float] = 原始图像中的 bbox 坐标（未矫正）
-        """
-        self.x1, self.y1, self.x2, self.y2, self.conf, self.cls_id = box_data
-        self.track_id = int(track_id_str)  # 视角编号，可后续替换成真正 ID
-        self.original_bbox = original_bbox
-
-    def key(self) -> str:
-        """唯一标识框坐标（用于映射）"""
-        return f"{int(self.x1)}_{int(self.y1)}_{int(self.x2)}_{int(self.y2)}"
-
-    def bbox(self) -> list:
-        return [self.x1, self.y1, self.x2, self.y2]
-
-    def box_data(self) -> list:
-        return [self.x1, self.y1, self.x2, self.y2, self.conf, self.cls_id]
-
-    def as_dict(self) -> dict:
-        return {
-            "bbox": self.bbox(),
-            "conf": self.conf,
-            "cls_id": self.cls_id,
-            "track_id": self.track_id,
-            "original_bbox": self.original_bbox
-        }
-
-    def __repr__(self):
-        return (
-            f"DetectionEntry(track_id={self.track_id}, "
-            f"cls_id={self.cls_id}, "
-            f"bbox={self.bbox()}, "
-            f"original_bbox={self.original_bbox})"
-        )
-
-
 def on_predict_postprocess_end(predictor: Union[object, MyDetectionPredictor], persist: bool = False) -> None:
     """
     Postprocess YOLO predictions across multiple views, perform association,
@@ -779,7 +743,7 @@ def on_predict_postprocess_end(predictor: Union[object, MyDetectionPredictor], p
     - 解析每个视角的检测结果并过滤
     - 执行多视角目标关联（MultiViewAssociation）
     - 构造 DetectionEntry 对象以封装检测项
-    - 构建并更新 frame_object_map（key 为 bbox，value 为 track_id 和原始框）
+    - 构建并更新 frame_object_map（key 为 bbox，value 为 view_name 和原始框）
     - 构建主视角结果图像并调用 tracker 进行更新
     - 将最终结果追加至 predictor.results
     """
@@ -803,22 +767,35 @@ def on_predict_postprocess_end(predictor: Union[object, MyDetectionPredictor], p
         logger.warning(
             f"Views mismatch: {len(detections_by_view)} dets vs {len(predictor.associator.views)} associator views.")
 
-    # 多视角关联，输出格式为 [ [bbox, track_id, original_bbox], ... ]
+    # 多视角关联，输出格式为 [ [bbox, view_name, original_bbox], ... ]
     multi_view_detections = associate_multi_view_detections(predictor, detections_by_view)
 
     # 构建 DetectionEntry 列表
     entries = build_detection_entries(multi_view_detections)
 
-    # 构建 frame_object_map：key = bbox_str，value = (track_id, original_bbox)
-    frame_object_map = build_object_map(entries)
-    predictor.object_map.update(frame_object_map)
-    logger.debug(f"Updated object_map with {len(frame_object_map)} entries.")
-
     # 构建主视角图像（canvas）并封装为 Results 对象
     main_view_result = build_main_view_result(predictor, entries)
 
     # 更新 tracker 状态，并将最终结果写入 predictor
-    update_tracker_and_results(predictor, main_view_result, entries, is_obb)
+    update_tracker_with_entries(
+        tracker=predictor.trackers[0], entries=entries, image=main_view_result.orig_img,
+    )
+
+    # 用 track.history_observations[-1] 与 entry.key() 精确匹配，填入 track_id
+    fill_detection_entry_track_ids_by_history(entries, predictor.trackers[0].active_tracks)
+
+    # 构建 frame_object_map：key = bbox_str，value = (view_name, original_bbox)
+    frame_object_map = build_object_map(entries)
+    predictor.object_map.update(frame_object_map)
+    logger.debug(f"Updated object_map with {len(frame_object_map)} entries.")
+
+    # 构造并写入主视角结果
+    finalize_main_view_result(predictor=predictor, result=main_view_result, entries=entries, is_obb=is_obb)
+    frame_index = predictor.seen - 1
+    for entry in entries:
+        logger.debug(f"[Entry] key={entry.key()}, track_id={entry.track_id}")
+        if entry.track_id:
+            track_manager.update(entry.track_id, entry, frame_index=frame_index)
 
 
 def extract_detections_by_view(predictor: MyDetectionPredictor, is_obb: bool) -> List[Dict[str, Any]]:
@@ -872,32 +849,33 @@ def associate_multi_view_detections(
         logger.info(f"Associated {len(associated)} multi-view detections.")
         return associated
     except Exception as e:
-        logger.error("Multi-view association failed.", exc_info=True)
+        logger.error(f"Multi-view association failed: {e}", exc_info=True)
         return []
 
 
-def build_detection_entries(raw_detections: List[List[Any]]) -> List[DetectionEntry]:
+def build_detection_entries(detections: List[List[Any]]) -> List[DetectionEntry]:
     """
-    Wrap raw detection output in DetectionEntry data structure.
+    构造 DetectionEntry
 
     Args:
-        raw_detections: List of raw detections (output from association)
+        detections: List of (projected_box, view_name, original_bbox)
 
     Returns:
-        List of DetectionEntry objects
+        List[DetectionEntry]
     """
-    try:
-        entries = [DetectionEntry(*det) for det in raw_detections]
-        logger.debug(f"Constructed {len(entries)} DetectionEntry objects.")
-        return entries
-    except Exception as e:
-        logger.error("Failed to create DetectionEntry list.", exc_info=True)
-        return []
+    return [
+        DetectionEntry(
+            box_data=box_data,
+            view_name=view_name,
+            original_bbox=original_bbox
+        )
+        for box_data, view_name, original_bbox in detections
+    ]
 
 
 def build_object_map(entries: List[DetectionEntry]) -> Dict[str, Tuple[str, Tuple[float, float, float, float]]]:
     """
-    Construct a mapping from detection box key to (track_id, original_bbox).
+    Construct a mapping from detection box key to (view_name, original_bbox).
 
     Args:
         entries: List of DetectionEntry objects
@@ -910,7 +888,7 @@ def build_object_map(entries: List[DetectionEntry]) -> Dict[str, Tuple[str, Tupl
         key = entry.key()
         if key in object_map:
             logger.warning(f"Duplicate entry key: {key}")
-        object_map[key] = (entry.track_id, entry.original_bbox)
+        object_map[key] = (entry.view_name, entry.original_bbox)
     return object_map
 
 
@@ -933,14 +911,54 @@ def build_main_view_result(predictor: MyDetectionPredictor, entries: List[Detect
     canvas = np.zeros((2 * MARGIN_HEIGHT + POOL_HEIGHT, 2 * MARGIN_WIDTH + POOL_WIDTH, 3), dtype=np.uint8)
     return Results(
         canvas,
-        path='main_view.jpg',
+        path=f'main_view_{predictor.seen:05d}.jpg',
         names=predictor.model.names,
         boxes=torch.as_tensor(det_array)
     )
 
 
-def update_tracker_and_results(predictor: MyDetectionPredictor, main_result: Results, entries: List[DetectionEntry],
-                               is_obb: bool) -> None:
+def update_tracker_with_entries(
+        tracker: Any,
+        entries: List[DetectionEntry],
+        image: np.ndarray,
+) -> None:
+    """
+    使用当前帧的 DetectionEntry 更新 tracker 状态（不返回结果）
+    """
+    try:
+        det_array = np.array([entry.box_data() for entry in entries])
+        if len(det_array) > 0:
+            tracks = tracker.update(det_array, image)
+            if not isinstance(tracks, (list, tuple)):
+                logger.warning(f"Tracker update did not return list/tuple. Got: {type(tracks)}")
+            elif len(tracks) == 0:
+                logger.info("Tracker update returned empty tracks.")
+            else:
+                logger.debug(f"{len(tracks)} tracks updated.")
+        else:
+            logger.debug("No detections, skipped tracker update.")
+    except Exception as e:
+        logger.error(f"Tracker update failed: {e}", exc_info=True)
+
+
+def finalize_main_view_result(
+        predictor, result, entries: List[DetectionEntry], is_obb: bool = False
+) -> None:
+    """
+    对主视角结果进行最终封装（tensor赋值 + 写入 predictor.results）
+    """
+    predictor.results.append(result)
+
+    det_array = np.array([entry.box_data() for entry in entries])
+    update_tensor = torch.as_tensor(det_array)
+
+    key = "obb" if is_obb else "boxes"
+    result.update(**{key: update_tensor})
+
+
+def update_tracker_and_results(
+        predictor: MyDetectionPredictor, main_result: Results, entries: List[DetectionEntry], is_obb: bool,
+) -> None:
     """
     Update the tracker with new detections and append results to predictor.
 
@@ -950,6 +968,7 @@ def update_tracker_and_results(predictor: MyDetectionPredictor, main_result: Res
         entries: List of DetectionEntry objects
         is_obb: Whether this is an OBB task
     """
+    det_array = []
     try:
         det_array = np.array([entry.box_data() for entry in entries])
         if len(det_array) > 0:
@@ -958,7 +977,7 @@ def update_tracker_and_results(predictor: MyDetectionPredictor, main_result: Res
         else:
             logger.debug("Skipping tracker update (no detections).")
     except Exception as e:
-        logger.error("Tracker update failed.", exc_info=True)
+        logger.error(f"Tracker update failed: {e}", exc_info=True)
 
     predictor.results.append(main_result)
     update_args = {"obb" if is_obb else "boxes": torch.as_tensor(det_array)}
@@ -966,9 +985,37 @@ def update_tracker_and_results(predictor: MyDetectionPredictor, main_result: Res
     logger.info("Main view result finalized and appended.")
 
 
+def fill_detection_entry_track_ids_by_history(
+        entries: List[DetectionEntry],
+        active_tracks: List[Any],
+) -> None:
+    """
+    用 tracker 的 history_observations[-1] 构造 key，
+    填入 DetectionEntry.track_id
+
+    Args:
+        entries: 当前帧的 DetectionEntry 列表
+        active_tracks: tracker.active_tracks 列表
+    """
+    entry_dict = {entry.key(): entry for entry in entries}
+    matched, unmatched = 0, 0
+
+    for track in active_tracks:
+        if not track.history_observations:
+            continue
+        box = track.history_observations[-1][:4]
+        key = f"{int(box[0])}_{int(box[1])}_{int(box[2])}_{int(box[3])}"
+        if key in entry_dict:
+            entry_dict[key].track_id = track.id
+            matched += 1
+        else:
+            unmatched += 1
+
+    logger.debug(f"[fill_track_id_by_history] Matched: {matched}, Unmatched: {unmatched}")
+
+
 @torch.no_grad()
 def run(args):
-    print("qwq")
     if args.imgsz is None:
         args.imgsz = default_imgsz(args.yolo_model)
 
@@ -1104,7 +1151,7 @@ def run(args):
             )
             # cv2.imwrite(os.path.join(root, f'img_{idx:05d}.jpg'), canvas)
             # pdb.set_trace()
-
+        all_images = []
         if args.save_video:
             all_images.append(canvas)
             if out is None:
@@ -1118,6 +1165,8 @@ def run(args):
                 break
 
         # loop 结束后释放
+    # 推理结束时手动关闭
+    track_controller.shutdown()
     if out:
         out.release()
         print(f"Finish saving video to {video_path}.")
@@ -1211,4 +1260,6 @@ def parse_opt():
 if __name__ == "__main__":
     opt = parse_opt()
     opt.metrics = opt.metrics.split(',')
+    track_controller = TrackManagerController(ttl=10, snapshot_interval=30,frame_window_span=30)
+    track_manager = track_controller.manager
     run(opt)

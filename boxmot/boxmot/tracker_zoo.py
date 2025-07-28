@@ -3,11 +3,16 @@
 import yaml
 from boxmot.utils import BOXMOT, TRACKER_CONFIGS
 
+
 def get_tracker_config(tracker_type):
     """Returns the path to the tracker configuration file."""
     return TRACKER_CONFIGS / f'{tracker_type}.yaml'
 
-def create_tracker(tracker_type, tracker_config=None, reid_weights=None, device=None, half=None, per_class=None, evolve_param_dict=None):
+
+def create_tracker(
+        tracker_type, tracker_config=None, reid_weights=None, device=None, half=None, per_class=None,
+        evolve_param_dict=None,
+):
     """
     Creates and returns an instance of the specified tracker type.
     
@@ -23,7 +28,7 @@ def create_tracker(tracker_type, tracker_config=None, reid_weights=None, device=
     Returns:
     - An instance of the selected tracker.
     """
-    
+
     # Load configuration from file or use provided dictionary
     if evolve_param_dict is None:
         with open(tracker_config, "r") as f:
@@ -59,7 +64,7 @@ def create_tracker(tracker_type, tracker_config=None, reid_weights=None, device=
     # Dynamically import and instantiate the correct tracker class
     module_path, class_name = tracker_mapping[tracker_type].rsplit('.', 1)
     tracker_class = getattr(__import__(module_path, fromlist=[class_name]), class_name)
-    
+
     # For specific trackers, update tracker arguments with ReID parameters
     if tracker_type in ['strongsort', 'botsort', 'deepocsort', 'hybridsort', 'imprassoc', 'boosttrack']:
         tracker_args['per_class'] = per_class

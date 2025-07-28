@@ -9,6 +9,7 @@
 
 # ignore the data_transfer and dataset folders(default save the original and transferred annotation files)
 data_transfer/
+data_transfer_crop/
 dataset/
 data_visualtion/
 

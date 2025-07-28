@@ -732,7 +732,7 @@ def on_predict_postprocess_end(predictor: object, persist: bool = False) -> None
         det = det[det[:, -1] != 0]
         det = {'image_path': result.path, 'det': det}
         dets.append(det)
-
+    pdb.set_trace()
     # if '0015' in result.path:
     #     pdb.set_trace()
     # N * 6, x1, y1, x2, y2, conf, cls_id
@@ -812,12 +812,6 @@ def run(args):
     yolo.add_callback('on_predict_postprocess_end', partial(on_predict_postprocess_end, persist=False))
     # store custom args in predictor
     yolo.predictor.custom_args = args
-<<<<<<< HEAD
-
-    if args.save_video:
-        all_images = []
-=======
->>>>>>> cee22a5bc8daae733e29d86659c8d56ebdbc1600
     
     # used to save the log
     save_results = {
@@ -904,14 +898,10 @@ def run(args):
             # pdb.set_trace()
 
         if args.save_video:
-<<<<<<< HEAD
-            all_images.append(canvas)
-=======
             if out is None:
                 h, w = canvas.shape[:2]
                 out = cv2.VideoWriter(video_path, fourcc, fps, (w, h))
             out.write(canvas)
->>>>>>> cee22a5bc8daae733e29d86659c8d56ebdbc1600
 
         if args.show is True:
             cv2.imshow('BoxMOT', canvas)     
@@ -928,12 +918,8 @@ def run(args):
         json.dump(save_results, file, ensure_ascii=False, indent=4)
         print(f'Finish saving log to {args.log_path}')
 
-<<<<<<< HEAD
-    if args.save_video:
-=======
 '''
     if args.save_video is not None:
->>>>>>> cee22a5bc8daae733e29d86659c8d56ebdbc1600
         root = os.path.join('runs', yolo.predictor.args.name)
         os.makedirs(root, exist_ok=True)
         video_path = os.path.join(root, 'video.mp4')

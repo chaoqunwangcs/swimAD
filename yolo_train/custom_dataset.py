@@ -2,6 +2,8 @@ import os
 from pathlib import Path
 import numpy as np
 import random
+import cv2
+import math
 import pdb
 
 from boxmot.multi_view_association.test_stream_split import View, Box
@@ -13,17 +15,42 @@ from ultralytics.utils.torch_utils import de_parallel
 from torch.utils.data import DataLoader
 from ultralytics.utils.checks import check_version
 from ultralytics.data.augment import Compose, Format, Mosaic, RandomPerspective, CopyPaste, MixUp, RandomHSV, RandomFlip, LetterBox
-from ultralytics.models.yolo.detect.val import DetectionValidator
 from ultralytics.utils.metrics import ConfusionMatrix, DetMetrics, box_iou
 from utils import load_dataset_cache_file, get_hash
 
+from ultralytics.models.yolo.detect.val import DetectionValidator
 from ultralytics.models.yolo.detect.train import DetectionTrainer
+
+from ultralytics.models.yolo.segment.val import SegmentationValidator
+from ultralytics.models.yolo.segment.train import SegmentationTrainer
+
 from torchvision import transforms
 import torch
 DATASET_CACHE_VERSION = "1.0.3"
 
 DEFAULT_MEAN = (0.37913725, 0.49507477, 0.51744888)
 DEFAULT_STD = (0.24070154, 0.20103757, 0.19606746)
+
+
+def reduce_blue_cast(image, **kwargs):
+    image[:, :, 0] = np.clip(image[:, :, 0] * 0.7, 0, 255).astype(np.uint8)
+    return image
+
+def remove_reflection(image, **kwargs):
+    # 转换为灰度图
+    gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+
+    # 用高亮阈值检测反光区域（可调整阈值）
+    _, mask = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY)
+
+    # 可选：膨胀 mask 让边缘更平滑
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    mask = cv2.dilate(mask, kernel, iterations=1)
+
+    # 用 inpainting 填补反光区域
+    inpainted = cv2.inpaint(image, mask, inpaintRadius=3, flags=cv2.INPAINT_NS)
+
+    return inpainted
 
 class Albumentations:
     """
@@ -143,6 +170,8 @@ class Albumentations:
                 A.RandomBrightnessContrast(p=0.5),
                 A.RandomGamma(p=0.5),
                 A.ImageCompression(quality_lower=75, quality_upper=100, p=0.01),
+                # A.Lambda(image=reduce_blue_cast, p=1.0)    #降低蓝色通道
+                # A.Lambda(image=remove_reflection, p=1.0)    #去除反光
             ]
 
             # Compose transforms
@@ -300,6 +329,61 @@ def v8_transforms(dataset, imgsz, hyp, stretch=False):
 
 
 class CustomDataset(YOLODataset):
+    def load_image(self, i, rect_mode=True):
+        """
+        Load an image from dataset index 'i'.
+
+        Args:
+            i (int): Index of the image to load.
+            rect_mode (bool, optional): Whether to use rectangular resizing.
+
+        Returns:
+            (np.ndarray): Loaded image.
+            (tuple): Original image dimensions (h, w).
+            (tuple): Resized image dimensions (h, w).
+
+        Raises:
+            FileNotFoundError: If the image file is not found.
+        """
+        im, f, fn = self.ims[i], self.im_files[i], self.npy_files[i]
+        if im is None:  # not cached in RAM
+            if fn.exists():  # load npy
+                try:
+                    im = np.load(fn)
+                except Exception as e:
+                    LOGGER.warning(f"{self.prefix}WARNING ⚠️ Removing corrupt *.npy image file {fn} due to: {e}")
+                    Path(fn).unlink(missing_ok=True)
+                    im = cv2.imread(f)  # BGR
+            else:  # read image
+                im = cv2.imread(f)  # BGR
+                # pdb.set_trace()
+                # im = cv2.imread(f, cv2.IMREAD_GRAYSCALE)
+                # im = cv2.cvtColor(im, cv2.COLOR_GRAY2BGR)
+            if im is None:
+                raise FileNotFoundError(f"Image Not Found {f}")
+
+            h0, w0 = im.shape[:2]  # orig hw
+            if rect_mode:  # resize long side to imgsz while maintaining aspect ratio
+                r = self.imgsz / max(h0, w0)  # ratio
+                if r != 1:  # if sizes are not equal
+                    w, h = (min(math.ceil(w0 * r), self.imgsz), min(math.ceil(h0 * r), self.imgsz))
+                    im = cv2.resize(im, (w, h), interpolation=cv2.INTER_LINEAR)
+            elif not (h0 == w0 == self.imgsz):  # resize by stretching image to square imgsz
+                im = cv2.resize(im, (self.imgsz, self.imgsz), interpolation=cv2.INTER_LINEAR)
+
+            # Add to buffer if training with augmentations
+            if self.augment:
+                self.ims[i], self.im_hw0[i], self.im_hw[i] = im, (h0, w0), im.shape[:2]  # im, hw_original, hw_resized
+                self.buffer.append(i)
+                if 1 < len(self.buffer) >= self.max_buffer_length:  # prevent empty buffer
+                    j = self.buffer.pop(0)
+                    if self.cache != "ram":
+                        self.ims[j], self.im_hw0[j], self.im_hw[j] = None, None, None
+
+            return im, (h0, w0), im.shape[:2]
+
+        return self.ims[i], self.im_hw0[i], self.im_hw[i]
+
     def get_img_files(self, img_path):
         # for swimAD data
         self.img2label_dict = dict()
@@ -436,7 +520,7 @@ def build_custom_dataset(cfg, img_path, batch, data, mode="train", rect=False, s
         fraction=cfg.fraction if mode == "train" else 1.0,
     )
 
-class CustomTrainer(DetectionTrainer):
+class CustomTrainer(SegmentationTrainer):
     def build_dataset(self, img_path, mode="train", batch=None):
         """
         Build YOLO Dataset for training or validation.
@@ -452,7 +536,7 @@ class CustomTrainer(DetectionTrainer):
         gs = max(int(de_parallel(self.model).stride.max() if self.model else 0), 32)
         return build_custom_dataset(self.args, img_path, batch, self.data, mode=mode, rect=mode == "val", stride=gs)
 
-class CustomValidator(DetectionValidator):
+class CustomValidator(SegmentationValidator):
     def __init__(self, dataloader=None, save_dir=None, pbar=None, args=None, _callbacks=None, region='all'):
         """
         Initialize detection validator with necessary variables and settings.

@@ -1,0 +1,12 @@
+data: cfgs/data_coco.yaml
+task: 'seg'
+
+epochs: 250         
+batch: 32              
+imgsz: 640             
+device: '1'          
+workers: 16             
+pretrained: True      
+seed: 42              
+deterministic: True   
+save_period: 30

@@ -4,16 +4,25 @@ import os
 import argparse
 import cv2
 import glob
+
 import copy
 from PIL import Image
 import numpy as np
 import threading
 from functools import partial
 from pathlib import Path
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Union, Tuple, Optional
 from datetime import datetime
 import torch
 import json
+import logging
+
+from tracking.detection_entry import DetectionEntry
+from tracking.drowning_detector import DrowningDetector
+from tracking.track_lifecycle import TrackManagerController
+from tracking.track_window_manager import TrackWindowManager
+
+logger = logging.getLogger(__name__)
 
 from ultralytics.data.augment import classify_transforms
 from ultralytics.engine.predictor import STREAM_WARNING
@@ -26,7 +35,7 @@ from tracking.detectors import (get_yolo_inferer, default_imgsz,
                                 is_ultralytics_model, is_yolox_model)
 
 checker = RequirementsChecker()
-checker.check_packages(('ultralytics @ git+https://github.com/mikel-brostrom/ultralytics.git', ))  # install
+checker.check_packages(('ultralytics @ git+https://github.com/mikel-brostrom/ultralytics.git',))  # install
 
 from ultralytics import YOLO
 from ultralytics.models import yolo
@@ -66,32 +75,33 @@ from ultralytics.data.loaders import (
     autocast_list,
 )
 
-from boxmot.multi_view_association.test_stream_split import MultiViewAssociationStream, POOL_WIDTH, POOL_HEIGHT, MARGIN_WIDTH, MARGIN_HEIGHT, MAIN_VIEW
+from boxmot.multi_view_association.test_stream_split import MultiViewAssociationStream, POOL_WIDTH, POOL_HEIGHT, \
+    MARGIN_WIDTH, MARGIN_HEIGHT, MAIN_VIEW
 
 import pdb
 
 
 def plot_ids(
-    result,
-    conf=True,
-    line_width=None,
-    font_size=None,
-    font="Arial.ttf",
-    pil=False,
-    img=None,
-    im_gpu=None,
-    kpt_radius=5,
-    kpt_line=True,
-    labels=True,
-    boxes=True,
-    masks=True,
-    probs=True,
-    show=False,
-    save=False,
-    filename=None,
-    color_mode="class",
-    txt_color=(255, 255, 255),
-    ignore_ids=[0],
+        result,
+        conf=True,
+        line_width=None,
+        font_size=None,
+        font="Arial.ttf",
+        pil=False,
+        img=None,
+        im_gpu=None,
+        kpt_radius=5,
+        kpt_line=True,
+        labels=True,
+        boxes=True,
+        masks=True,
+        probs=True,
+        show=False,
+        save=False,
+        filename=None,
+        color_mode="class",
+        txt_color=(255, 255, 255),
+        ignore_ids=[0],
 ):
     """
     Plots detection results on an input RGB image.
@@ -177,6 +187,7 @@ def plot_ids(
 
     return annotator.im if pil else annotator.result()
 
+
 class LoadMultiViewImagesAndVideos:
     """
     A class for loading and processing images and videos for YOLO object detection.
@@ -232,11 +243,11 @@ class LoadMultiViewImagesAndVideos:
         for view in self.views:
             images = []
             view_path = os.path.join(path, view)
-            a = str(Path(view_path).absolute()) 
+            a = str(Path(view_path).absolute())
             images.extend(sorted(glob.glob(os.path.join(a, "*.*"))))
             images = [x for x in images if x.split(".")[-1].lower() in IMG_FORMATS]
             files[view] = images
-        
+
         ni, nv = len(images), 0
 
         self.files = files
@@ -334,6 +345,7 @@ class LoadMultiViewImagesAndVideos:
         """Returns the number of files (images and videos) in the dataset."""
         return math.ceil(self.nf / self.bs)  # number of batches
 
+
 def load_inference_source(source=None, batch=1, vid_stride=1, buffer=False):
     """
     Load an inference source for object detection and apply necessary transformations.
@@ -369,6 +381,8 @@ class MyDetectionPredictor(yolo.detect.DetectionPredictor):
             overrides (dict | None): Configuration overrides.
             _callbacks (dict | None): Dictionary of callback functions.
         """
+        super().__init__(cfg, overrides, _callbacks)
+
         if 'calibration' in overrides:
             cfg.calibration = overrides['calibration']
         self.args = get_cfg(cfg, overrides)
@@ -380,6 +394,7 @@ class MyDetectionPredictor(yolo.detect.DetectionPredictor):
             self.args.show = check_imshow(warn=True)
 
         # Usable if setup is done
+        self.associator = None
         self.object_map = {}
         self.model = None
         self.data = self.args.data  # data_dict
@@ -428,10 +443,10 @@ class MyDetectionPredictor(yolo.detect.DetectionPredictor):
         )
         self.source_type = self.dataset.source_type
         if not getattr(self, "stream", True) and (
-            self.source_type.stream
-            or self.source_type.screenshot
-            or len(self.dataset) > 1000  # many images
-            or any(getattr(self.dataset, "video_flag", [False]))
+                self.source_type.stream
+                or self.source_type.screenshot
+                or len(self.dataset) > 1000  # many images
+                or any(getattr(self.dataset, "video_flag", [False]))
         ):  # videos
             LOGGER.warning(STREAM_WARNING)
         self.vid_writer = {}
@@ -453,11 +468,11 @@ class MyDetectionPredictor(yolo.detect.DetectionPredictor):
         """
         if self.args.verbose:
             LOGGER.info("")
-        
+
         # Setup model
         if not self.model:
             self.setup_model(model)
-        
+
         if not hasattr(self, 'associator'):
             self.setup_associator(self.args.calibration)
 
@@ -471,7 +486,10 @@ class MyDetectionPredictor(yolo.detect.DetectionPredictor):
 
             # Warmup model
             if not self.done_warmup:
-                self.model.warmup(imgsz=(self.dataset.num_v if self.model.pt or self.model.triton else self.dataset.bs*self.dataset.num_v, 3, *self.imgsz))
+                self.model.warmup(imgsz=(
+                    self.dataset.num_v if self.model.pt or self.model.triton else self.dataset.bs * self.dataset.num_v,
+                    3,
+                    *self.imgsz))
                 self.done_warmup = True
 
             self.seen, self.windows, self.batch = 0, [], None
@@ -538,13 +556,14 @@ class MyDetectionPredictor(yolo.detect.DetectionPredictor):
             LOGGER.info(f"Results saved to {colorstr('bold', self.save_dir)}{s}")
         self.run_callbacks("on_predict_end")
 
+
 class MYYOLO(YOLO):
     def track(
-        self,
-        source: Union[str, Path, int, list, tuple, np.ndarray, torch.Tensor] = None,
-        stream: bool = False,
-        persist: bool = False,
-        **kwargs: Any,
+            self,
+            source: Union[str, Path, int, list, tuple, np.ndarray, torch.Tensor] = None,
+            stream: bool = False,
+            persist: bool = False,
+            **kwargs: Any,
     ) -> List[Results]:
         """
         Conducts object tracking on the specified input source using the registered trackers.
@@ -620,11 +639,11 @@ class MYYOLO(YOLO):
         }
 
     def predict(
-        self,
-        source: Union[str, Path, int, Image.Image, list, tuple, np.ndarray, torch.Tensor] = None,
-        stream: bool = False,
-        predictor=None,
-        **kwargs: Any,
+            self,
+            source: Union[str, Path, int, Image.Image, list, tuple, np.ndarray, torch.Tensor] = None,
+            stream: bool = False,
+            predictor=None,
+            **kwargs: Any,
     ) -> List[Results]:
         """
         Performs predictions on the given image source using the YOLO model.
@@ -680,7 +699,6 @@ class MYYOLO(YOLO):
         return self.predictor.predict_cli(source=source) if is_cli else self.predictor(source=source, stream=stream)
 
 
-
 def on_predict_start(predictor, persist=False):
     """
     Initialize trackers for object tracking during prediction.
@@ -712,81 +730,334 @@ def on_predict_start(predictor, persist=False):
     predictor.trackers = trackers
 
 
-def on_predict_postprocess_end(predictor: object, persist: bool = False) -> None:
+def on_predict_postprocess_end(predictor: Union[object, MyDetectionPredictor], persist: bool = False) -> None:
     """
-    Postprocess detected boxes and update with object tracking.
+    Postprocess YOLO predictions across multiple views, perform association,
+    construct object map, and update tracker.
 
     Args:
-        predictor (object): The predictor object containing the predictions.
-        persist (bool): Whether to persist the trackers if they already exist.
+        predictor: Detection predictor object
+        persist: Whether to keep existing tracker states
 
-    Examples:
-        Postprocess predictions and update with tracking
-        >>> predictor = YourPredictorClass()
-        >>> on_predict_postprocess_end(predictor, persist=True)
+    多视角检测后处理流程：
+    - 判断是否为OBB任务以及是否为流式模式
+    - 检查是否已初始化追踪器
+    - 解析每个视角的检测结果并过滤
+    - 执行多视角目标关联（MultiViewAssociation）
+    - 构造 DetectionEntry 对象以封装检测项
+    - 构建并更新 frame_object_map（key 为 bbox，value 为 view_name 和原始框）
+    - 构建主视角结果图像并调用 tracker 进行更新
+    - 将最终结果追加至 predictor.results
     """
     is_obb = predictor.args.task == "obb"
     is_stream = predictor.dataset.mode == "stream"
+    logger.debug(f"Task: {'OBB' if is_obb else 'BBox'}, stream: {is_stream}")
 
-    dets = []
-    for i, result in enumerate(predictor.results):
-        det = (result.obb.data if is_obb else result.boxes.data).cpu().numpy()
-        # filter the ashore person, who's cls_id == 0
-        det = det[det[:, -1] != 0]
-        det = {'image_path': result.path, 'det': det}
-        dets.append(det)
+    # 检查是否存在追踪器
+    if not hasattr(predictor, 'trackers'):
+        logger.warning("Trackers not initialized.")
+        return
 
-    # if '0015' in result.path:
-    #     pdb.set_trace()
-    # N * 6, x1, y1, x2, y2, conf, cls_id
-    multi_view_det = predictor.associator.forward(dets)
-    frame_object_map = dict()
-    for box in multi_view_det:
-        box_xyxy = f'{int(box[0][0]):d}_{int(box[0][1]):d}_{int(box[0][2]):d}_{int(box[0][3]):d}'
-        frame_object_map[box_xyxy] = (box[1], box[2])
+    # 检查是否有预测结果
+    if not predictor.results:
+        logger.warning("No results found in predictor.")
+        return
 
-    predictor.object_map.update(frame_object_map)
-    det = np.array([x[0] for x in multi_view_det])
-    if len(multi_view_det) == 0:
-        det = np.zeros((0, 6))
-    main_results = Results(
-        np.zeros((2*MARGIN_HEIGHT+POOL_HEIGHT, 2*MARGIN_WIDTH+POOL_WIDTH, 3), dtype=np.uint8),
-        path='aa.jpg',
-        names = predictor.model.names,
-        boxes = torch.as_tensor(det)
+    # 提取每个视角的检测框信息（并剔除 cls_id == 0 的 ashore person）
+    detections_by_view = extract_detections_by_view(predictor, is_obb)
+    if len(detections_by_view) != len(predictor.associator.views):
+        logger.warning(
+            f"Views mismatch: {len(detections_by_view)} dets vs {len(predictor.associator.views)} associator views.")
+
+    # 多视角关联，输出格式为 [ [bbox, view_name, original_bbox], ... ]
+    multi_view_detections = associate_multi_view_detections(predictor, detections_by_view)
+
+    # 构建 DetectionEntry 列表
+    entries = build_detection_entries(multi_view_detections)
+
+    # 构建主视角图像（canvas）并封装为 Results 对象
+    main_view_result = build_main_view_result(predictor, entries)
+
+    # 更新 tracker 状态，并将最终结果写入 predictor
+    update_tracker_with_entries(
+        tracker=predictor.trackers[0], entries=entries, image=main_view_result.orig_img,
     )
 
-    if len(det) > 0:
-        tracks = predictor.trackers[0].update(det, main_results.orig_img)
-    
-    predictor.results.append(main_results)
-    update_args = {"obb" if is_obb else "boxes": torch.as_tensor(det)}
-    
+    # 用 track.history_observations[-1] 与 entry.key() 精确匹配，填入 track_id
+    fill_detection_entry_track_ids_by_history(entries, predictor.trackers[0].active_tracks)
+
+    # 构建 frame_object_map：key = bbox_str，value = (view_name, original_bbox)
+    frame_object_map = build_object_map(entries)
+    predictor.object_map.update(frame_object_map)
+    logger.debug(f"Updated object_map with {len(frame_object_map)} entries.")
+
+    # 构造并写入主视角结果
+    finalize_main_view_result(predictor=predictor, result=main_view_result, entries=entries, is_obb=is_obb)
+    frame_index = predictor.seen - 1
+    for entry in entries:
+        logger.debug(f"[Entry] key={entry.key()}, track_id={entry.track_id}")
+        if entry.track_id:
+            g_track_manager.update(entry.track_id, entry, frame_index=frame_index)
+
+    # 检测异常轨迹
+    # TODO: 发出警告
+    check_drowning_alerts(g_track_manager)
+
+
+def check_drowning_alerts(track_manager) -> None:
+    """
+    执行溺水检测并使用结构化日志输出，仅对异常轨迹进行记录。
+    """
+    detector = DrowningDetector(use_original_bbox=True)
+    abnormal = track_manager.detect_abnormal_tracks(detector.as_hook_fn())
+
+    for track_id, result in abnormal.items():
+        if not result or not result.get("alarm", default=False):
+            continue
+        logger.warning(f"[ALARM] Track {track_id} triggered drowning alert:")
+        for rule in result.get("triggered_rules", []):
+            rule_id = rule["rule_id"]
+            rule_name = rule["rule_name"]
+            value = rule["value"]
+            value_str = _format_rule_value(value)
+            logger.warning(f"{track_id} - [{rule_id}] {rule_name} -> {value_str}")
+        # TODO: 一个广播式的异常通知接口
+
+
+def _format_rule_value(value) -> str:
+    """
+    结构化格式化规则值（支持 float, list/tuple, 其他类型）
+    """
+    if isinstance(value, (tuple, list)):
+        return "(" + ", ".join(f"{v:.2f}" if isinstance(v, float) else str(v) for v in value) + ")"
+    if isinstance(value, float):
+        return f"{value:.2f}"
+    return str(value)
+
+
+def extract_detections_by_view(predictor: MyDetectionPredictor, is_obb: bool) -> List[Dict[str, Any]]:
+    """
+    Extract bounding box detections from each view result.
+    Filters out detections with class_id == 0.
+
+    Args:
+        predictor: Detection predictor object
+        is_obb: Whether to extract oriented bounding boxes (OBB)
+
+    Returns:
+        List of detection dictionaries with image path and filtered boxes
+    """
+    detections = []
+    for result in predictor.results:
+        try:
+            raw_boxes = result.obb.data if is_obb else result.boxes.data
+            det_array = raw_boxes.cpu().numpy()
+
+            if det_array.ndim != 2 or det_array.shape[1] < 6:
+                logger.warning(f"Invalid det shape in {result.path}: {det_array.shape}")
+                continue
+
+            filtered_det = det_array[det_array[:, -1] != 0]
+            detections.append({
+                'image_path': result.path,
+                'det': filtered_det
+            })
+            logger.debug(f"{result.path}: {len(filtered_det)} detections kept.")
+        except Exception as e:
+            logger.error(f"Error reading detection from {result.path}: {e}", exc_info=True)
+    return detections
+
+
+def associate_multi_view_detections(
+        predictor: MyDetectionPredictor, detections: List[Dict[str, Any]],
+) -> List[List[Any]]:
+    """
+    Perform multi-view association using the predictor's associator.
+
+    Args:
+        predictor: Detection predictor object
+        detections: List of per-view detection dicts
+
+    Returns:
+        List of associated detections across views
+    """
+    try:
+        associated = predictor.associator.forward(detections)
+        logger.info(f"Associated {len(associated)} multi-view detections.")
+        return associated
+    except Exception as e:
+        logger.error(f"Multi-view association failed: {e}", exc_info=True)
+        return []
+
+
+def build_detection_entries(detections: List[List[Any]]) -> List[DetectionEntry]:
+    """
+    构造 DetectionEntry
+
+    Args:
+        detections: List of (projected_box, view_name, original_bbox)
+
+    Returns:
+        List[DetectionEntry]
+    """
+    return [
+        DetectionEntry(
+            box_data=box_data,
+            view_name=view_name,
+            original_bbox=original_bbox
+        )
+        for box_data, view_name, original_bbox in detections
+    ]
+
+
+def build_object_map(entries: List[DetectionEntry]) -> Dict[str, Tuple[str, Tuple[float, float, float, float]]]:
+    """
+    Construct a mapping from detection box key to (view_name, original_bbox).
+
+    Args:
+        entries: List of DetectionEntry objects
+
+    Returns:
+        Object map for the current frame
+    """
+    object_map = {}
+    for entry in entries:
+        key = entry.key()
+        if key in object_map:
+            logger.warning(f"Duplicate entry key: {key}")
+        object_map[key] = (entry.view_name, entry.original_bbox)
+    return object_map
+
+
+def build_main_view_result(predictor: MyDetectionPredictor, entries: List[DetectionEntry]) -> Results:
+    """
+    Build the main view result canvas with boxes for YOLO tracker.
+
+    Args:
+        predictor: Detection predictor object
+        entries: List of DetectionEntry objects
+
+    Returns:
+        Results object with image, path, and detection tensor
+    """
+    det_array = np.array([entry.box_data() for entry in entries])
+    if len(det_array) == 0:
+        logger.info("Empty detection array. Filling with shape (0, 6).")
+        det_array = np.zeros((0, 6))
+
+    canvas = np.zeros((2 * MARGIN_HEIGHT + POOL_HEIGHT, 2 * MARGIN_WIDTH + POOL_WIDTH, 3), dtype=np.uint8)
+    return Results(
+        canvas,
+        path=f'main_view_{predictor.seen:05d}.jpg',
+        names=predictor.model.names,
+        boxes=torch.as_tensor(det_array)
+    )
+
+
+def update_tracker_with_entries(
+        tracker: Any,
+        entries: List[DetectionEntry],
+        image: np.ndarray,
+) -> None:
+    """
+    使用当前帧的 DetectionEntry 更新 tracker 状态（不返回结果）
+    """
+    try:
+        det_array = np.array([entry.box_data() for entry in entries])
+        if len(det_array) > 0:
+            tracks = tracker.update(det_array, image)
+            if not isinstance(tracks, (list, tuple)):
+                logger.warning(f"Tracker update did not return list/tuple. Got: {type(tracks)}")
+            elif len(tracks) == 0:
+                logger.info("Tracker update returned empty tracks.")
+            else:
+                logger.debug(f"{len(tracks)} tracks updated.")
+        else:
+            logger.debug("No detections, skipped tracker update.")
+    except Exception as e:
+        logger.error(f"Tracker update failed: {e}", exc_info=True)
+
+
+def finalize_main_view_result(
+        predictor, result, entries: List[DetectionEntry], is_obb: bool = False
+) -> None:
+    """
+    对主视角结果进行最终封装（tensor赋值 + 写入 predictor.results）
+    """
+    predictor.results.append(result)
+
+    det_array = np.array([entry.box_data() for entry in entries])
+    update_tensor = torch.as_tensor(det_array)
+
+    key = "obb" if is_obb else "boxes"
+    result.update(**{key: update_tensor})
+
+
+def update_tracker_and_results(
+        predictor: MyDetectionPredictor, main_result: Results, entries: List[DetectionEntry], is_obb: bool,
+) -> None:
+    """
+    Update the tracker with new detections and append results to predictor.
+
+    Args:
+        predictor: Detection predictor object
+        main_result: Main Results object
+        entries: List of DetectionEntry objects
+        is_obb: Whether this is an OBB task
+    """
+    det_array = []
+    try:
+        det_array = np.array([entry.box_data() for entry in entries])
+        if len(det_array) > 0:
+            tracks = predictor.trackers[0].update(det_array, main_result.orig_img)
+            logger.debug(f"{len(tracks)} tracks updated.")
+        else:
+            logger.debug("Skipping tracker update (no detections).")
+    except Exception as e:
+        logger.error(f"Tracker update failed: {e}", exc_info=True)
+
+    predictor.results.append(main_result)
+    update_args = {"obb" if is_obb else "boxes": torch.as_tensor(det_array)}
     predictor.results[-1].update(**update_args)
-    # if len(tracks) > 0:
-    #     idx = tracks[:, -1].astype(int)
-    #     predictor.results.append(main_results[idx])
-
-    #     update_args = {"obb" if is_obb else "boxes": torch.as_tensor(tracks[:, :-1])}
-    #     predictor.results[-1].update(**update_args)
-
-    # if len(det) == 0 or len(tracks) == 0:
-    #     predictor.results.append(main_results)
-    #     update_args = {"obb" if is_obb else "boxes": torch.as_tensor(det)}
-    #     predictor.results[-1].update(**update_args)
+    logger.info("Main view result finalized and appended.")
 
 
+def fill_detection_entry_track_ids_by_history(
+        entries: List[DetectionEntry],
+        active_tracks: List[Any],
+) -> None:
+    """
+    用 tracker 的 history_observations[-1] 构造 key，
+    填入 DetectionEntry.track_id
+
+    Args:
+        entries: 当前帧的 DetectionEntry 列表
+        active_tracks: tracker.active_tracks 列表
+    """
+    entry_dict = {entry.key(): entry for entry in entries}
+    matched, unmatched = 0, 0
+
+    for track in active_tracks:
+        if not track.history_observations:
+            continue
+        box = track.history_observations[-1][:4]
+        key = f"{int(box[0])}_{int(box[1])}_{int(box[2])}_{int(box[3])}"
+        if key in entry_dict:
+            entry_dict[key].track_id = track.id
+            matched += 1
+        else:
+            unmatched += 1
+
+    logger.debug(f"[fill_track_id_by_history] Matched: {matched}, Unmatched: {unmatched}")
 
 
 @torch.no_grad()
 def run(args):
-
     if args.imgsz is None:
         args.imgsz = default_imgsz(args.yolo_model)
 
-    yolo = MYYOLO(args.yolo_model)    # add default callbacks
-    
-    
+    yolo = MYYOLO(args.yolo_model)  # add default callbacks
+
     results = yolo.track(
         source=args.source,
         conf=args.conf,
@@ -816,19 +1087,16 @@ def run(args):
     # store custom args in predictor
     yolo.predictor.custom_args = args
 
-    if args.save_video:
-        all_images = []
-    
     # used to save the log
     save_results = {
         'video_id': args.source,
         'time_str': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         'frame_data': {}
     }
-    
+
     if args.imgsz is None:
         args.imgsz = default_imgsz(args.yolo_model)
-        
+
     root = os.path.join('runs', yolo.predictor.args.name)
     os.makedirs(root, exist_ok=True)
     out = None
@@ -836,38 +1104,56 @@ def run(args):
         video_path = os.path.join(root, 'video.mp4')
         fourcc = cv2.VideoWriter_fourcc(*'H264')
         fps = 10
-
-    for idx, r in enumerate(results):        
-
-        #if idx > 100:
+    for idx, r in enumerate(results):
+        print(idx, r)
+        # if idx > 100:
         #    break
         # each view det result
-        img_view1 = plot_ids(r[0], line_width=yolo.predictor.args.line_width,boxes=yolo.predictor.args.show_boxes,conf=yolo.predictor.args.show_conf,labels=yolo.predictor.args.show_labels,im_gpu=r[0].orig_img)
-        img_view2 = plot_ids(r[1], line_width=yolo.predictor.args.line_width,boxes=yolo.predictor.args.show_boxes,conf=yolo.predictor.args.show_conf,labels=yolo.predictor.args.show_labels,im_gpu=r[1].orig_img)
-        img_view3 = plot_ids(r[2], line_width=yolo.predictor.args.line_width,boxes=yolo.predictor.args.show_boxes,conf=yolo.predictor.args.show_conf,labels=yolo.predictor.args.show_labels,im_gpu=r[2].orig_img)
-        img_view4 = plot_ids(r[3], line_width=yolo.predictor.args.line_width,boxes=yolo.predictor.args.show_boxes,conf=yolo.predictor.args.show_conf,labels=yolo.predictor.args.show_labels,im_gpu=r[3].orig_img)
+        img_view1 = plot_ids(r[0], line_width=yolo.predictor.args.line_width, boxes=yolo.predictor.args.show_boxes,
+                             conf=yolo.predictor.args.show_conf, labels=yolo.predictor.args.show_labels,
+                             im_gpu=r[0].orig_img)
+        img_view2 = plot_ids(r[1], line_width=yolo.predictor.args.line_width, boxes=yolo.predictor.args.show_boxes,
+                             conf=yolo.predictor.args.show_conf, labels=yolo.predictor.args.show_labels,
+                             im_gpu=r[1].orig_img)
+        img_view3 = plot_ids(r[2], line_width=yolo.predictor.args.line_width, boxes=yolo.predictor.args.show_boxes,
+                             conf=yolo.predictor.args.show_conf, labels=yolo.predictor.args.show_labels,
+                             im_gpu=r[2].orig_img)
+        img_view4 = plot_ids(r[3], line_width=yolo.predictor.args.line_width, boxes=yolo.predictor.args.show_boxes,
+                             conf=yolo.predictor.args.show_conf, labels=yolo.predictor.args.show_labels,
+                             im_gpu=r[3].orig_img)
 
         # main view det result
-        main_det = plot_ids(r[4], line_width=yolo.predictor.args.line_width,boxes=yolo.predictor.args.show_boxes,conf=yolo.predictor.args.show_conf,labels=yolo.predictor.args.show_labels,im_gpu=r[4].orig_img)
-        cv2.rectangle(main_det, (MARGIN_WIDTH, MARGIN_HEIGHT), (MARGIN_WIDTH+POOL_WIDTH,MARGIN_HEIGHT+POOL_HEIGHT),(0,255,0),3) # plot the pool boundary
-        main_det = cv2.resize(main_det, (main_det.shape[1], img_view1.shape[0]*2), interpolation=cv2.INTER_LINEAR)
-        cv2.putText(main_det, 'Det', (int(main_det.shape[1]/2.0-150), int(MARGIN_HEIGHT/1.5)), cv2.FONT_HERSHEY_SIMPLEX, 5, (255, 255, 255), thickness=5)
+        main_det = plot_ids(r[4], line_width=yolo.predictor.args.line_width, boxes=yolo.predictor.args.show_boxes,
+                            conf=yolo.predictor.args.show_conf, labels=yolo.predictor.args.show_labels,
+                            im_gpu=r[4].orig_img)
+        cv2.rectangle(main_det, (MARGIN_WIDTH, MARGIN_HEIGHT), (MARGIN_WIDTH + POOL_WIDTH, MARGIN_HEIGHT + POOL_HEIGHT),
+                      (0, 255, 0), 3)  # plot the pool boundary
+        main_det = cv2.resize(main_det, (main_det.shape[1], img_view1.shape[0] * 2), interpolation=cv2.INTER_LINEAR)
+        cv2.putText(main_det, 'Det', (int(main_det.shape[1] / 2.0 - 150), int(MARGIN_HEIGHT / 1.5)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 5, (255, 255, 255), thickness=5)
 
         # main view track result
-        main_track = yolo.predictor.trackers[0].plot_multi_view_results(r[4].orig_img, args.show_trajectories, fontscale=3, thickness=5)
-        cv2.rectangle(main_track, (MARGIN_WIDTH, MARGIN_HEIGHT), (MARGIN_WIDTH+POOL_WIDTH,MARGIN_HEIGHT+POOL_HEIGHT),(0,255,0),3) # plot the pool boundary
-        main_track = cv2.resize(main_track, (main_track.shape[1], img_view1.shape[0]*2), interpolation=cv2.INTER_LINEAR)
-        cv2.putText(main_track, 'Track', (int(main_track.shape[1]/2.0-150), int(MARGIN_HEIGHT/1.5)), cv2.FONT_HERSHEY_SIMPLEX, 5, (255, 255, 255), thickness=5)
+        main_track = yolo.predictor.trackers[0].plot_multi_view_results(r[4].orig_img, args.show_trajectories,
+                                                                        fontscale=3, thickness=5)
+        cv2.rectangle(main_track, (MARGIN_WIDTH, MARGIN_HEIGHT),
+                      (MARGIN_WIDTH + POOL_WIDTH, MARGIN_HEIGHT + POOL_HEIGHT), (0, 255, 0),
+                      3)  # plot the pool boundary
+        main_track = cv2.resize(main_track, (main_track.shape[1], img_view1.shape[0] * 2),
+                                interpolation=cv2.INTER_LINEAR)
+        cv2.putText(main_track, 'Track', (int(main_track.shape[1] / 2.0 - 150), int(MARGIN_HEIGHT / 1.5)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 5, (255, 255, 255), thickness=5)
 
         # merge together
         resize_factor = 0.5
-        canvas = np.hstack((np.vstack((np.hstack((img_view1, img_view2)), np.hstack((img_view3, img_view4)))),main_det, main_track))
-        cv2.putText(canvas, f'{idx:04d}', ((canvas.shape[1]-600), int(MARGIN_HEIGHT/1.5)), cv2.FONT_HERSHEY_SIMPLEX, 5, (255, 255, 255), thickness=5)
-        canvas = cv2.resize(canvas, None, fx=resize_factor,fy=resize_factor, interpolation=cv2.INTER_LINEAR)
-        
+        canvas = np.hstack(
+            (np.vstack((np.hstack((img_view1, img_view2)), np.hstack((img_view3, img_view4)))), main_det, main_track))
+        cv2.putText(canvas, f'{idx:04d}', ((canvas.shape[1] - 600), int(MARGIN_HEIGHT / 1.5)), cv2.FONT_HERSHEY_SIMPLEX,
+                    5, (255, 255, 255), thickness=5)
+        canvas = cv2.resize(canvas, None, fx=resize_factor, fy=resize_factor, interpolation=cv2.INTER_LINEAR)
+
         # pdb.set_trace()
         # swim AD rules:
-        swimAD_results =  yolo.predictor.trackers[0].detect_AD_v2(yolo.predictor.object_map, args.metrics)
+        swimAD_results = yolo.predictor.trackers[0].detect_AD_v2(yolo.predictor.object_map, args.metrics)
 
         # remap the box to the saved video
         for obj_id in swimAD_results.keys():
@@ -875,7 +1161,7 @@ def run(args):
             x1, y1 = swimAD_results[obj_id]['bbox_left_top']
             x2, y2 = swimAD_results[obj_id]['bbox_right_bottom']
             x1, y1, x2, y2 = x1 * resize_factor, y1 * resize_factor, x2 * resize_factor, y2 * resize_factor
-            new_img_width, new_img_height = r[0].orig_shape[1] * resize_factor, r[0].orig_shape[0] * resize_factor 
+            new_img_width, new_img_height = r[0].orig_shape[1] * resize_factor, r[0].orig_shape[0] * resize_factor
             if view == '2':
                 x1, x2 = x1 + new_img_width, x2 + new_img_width
             if view == '3':
@@ -896,13 +1182,13 @@ def run(args):
             os.makedirs(root, exist_ok=True)
             # 改为保存为 webp 并指定质量（0-100）
             cv2.imwrite(
-               os.path.join(root, f'img_{idx:05d}.webp'),
-               canvas,
-               [int(cv2.IMWRITE_WEBP_QUALITY), 95]
-           )
-            #cv2.imwrite(os.path.join(root, f'img_{idx:05d}.jpg'), canvas)
+                os.path.join(root, f'img_{idx:05d}.webp'),
+                canvas,
+                [int(cv2.IMWRITE_WEBP_QUALITY), 95]
+            )
+            # cv2.imwrite(os.path.join(root, f'img_{idx:05d}.jpg'), canvas)
             # pdb.set_trace()
-
+        all_images = []
         if args.save_video:
             all_images.append(canvas)
             if out is None:
@@ -910,12 +1196,14 @@ def run(args):
                 out = cv2.VideoWriter(video_path, fourcc, fps, (w, h))
             out.write(canvas)
         if args.show is True:
-            cv2.imshow('BoxMOT', canvas)     
+            cv2.imshow('BoxMOT', canvas)
             key = cv2.waitKey(1) & 0xFF
             if key == ord(' ') or key == ord('q'):
                 break
-            
+
         # loop 结束后释放
+    # 推理结束时手动关闭
+    track_controller.shutdown()
     if out:
         out.release()
         print(f"Finish saving video to {video_path}.")
@@ -939,10 +1227,7 @@ def run(args):
         print(f"Finish saving video to {video_path}.")
 
 
-
-
 def parse_opt():
-    
     parser = argparse.ArgumentParser()
     parser.add_argument('--yolo-model', type=Path, default=WEIGHTS / 'yolov8n',
                         help='yolo model path')
@@ -967,7 +1252,7 @@ def parse_opt():
     parser.add_argument('--save-video', action='store_true',
                         help='save video tracking results in .mp4 format')
     parser.add_argument('--calibration', default='boxmot/multi_view_association/region_calibration_data_v1.json',
-                        help='the annotated calibration file, used for multi view association')           
+                        help='the annotated calibration file, used for multi view association')
     parser.add_argument('--metrics', type=str, default='min_dist,max_dist,class_label',
                         help='the metrics used for AD detection in the swimming pool')
     parser.add_argument('--log-path', type=str, default='log.json',
@@ -1012,4 +1297,6 @@ def parse_opt():
 if __name__ == "__main__":
     opt = parse_opt()
     opt.metrics = opt.metrics.split(',')
+    track_controller = TrackManagerController(ttl=10, snapshot_interval=30, frame_window_span=30)
+    g_track_manager = track_controller.manager
     run(opt)

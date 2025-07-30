@@ -56,6 +56,7 @@ TODO:
 2. 可以试试调整匹配阈值
 3. 可以把aug降低点儿，这样可以降低一些数据分布的误差
 4. 可以试试在推理的时候降低置信度阈值
+
 focal loss路径：/home/chaoqunwang/anaconda3/envs/swimAD/lib/python3.9/site-packages/ultralytics/utils/loss.py
 ## 实验结果(*为推理参数)
 

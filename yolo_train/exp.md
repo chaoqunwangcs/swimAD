@@ -56,7 +56,7 @@ TODO:
 2. 可以试试调整匹配阈值
 3. 可以把aug降低点儿，这样可以降低一些数据分布的误差
 4. 可以试试在推理的时候降低置信度阈值
-
+focal loss路径：/home/chaoqunwang/anaconda3/envs/swimAD/lib/python3.9/site-packages/ultralytics/utils/loss.py
 ## 实验结果(*为推理参数)
 
 | 参数   | 值    | mAP50-90 | 备注 |
@@ -71,6 +71,13 @@ TODO:
 |imgsz   | 1280  |           | 增大分辨率，后续可用于蒸馏 |
 |rect    | False |           | 默认  |
 |rect    | True  |           | 仅尝试|
+|topk    | 13    |  0.256    | 默认  |
+|topk    | 20    |           | 增大assinger中正样本的匹配数目|
+|cls_loss| BCE   |  0.256    | 默认  |
+|cls_loss| Focal |           | 更改分类损失|
+|gamma   | 1.5   |           | focal loss 默认值|
+|gamma   | 1.0   |           | 降低温度系数，增加hard case权重|
+|gamma   | 0.5   |           | 降低温度系数，增加hard case权重|
 |conf*   | 0.25  |   0.256   |推理默认值|
 |conf*   | 0.1   |   0.29     |recall没有明显提升|
 |conf*   | 0.01   |   0.26     |recall没有明显提升,分类错误率提升|

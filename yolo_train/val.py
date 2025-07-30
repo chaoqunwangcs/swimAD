@@ -20,8 +20,8 @@ def parse_arguments():
     
     parser = argparse.ArgumentParser(description=" ")
     parser.add_argument("-d", "--data-cfg", type=str, default="cfgs/data_swimAD_v20250604.yaml", help="the data config, only test the val set.")
-    parser.add_argument("-p", "--ckpt", type=str, default="./runs/detect/yolov11l_swimAD/weights/best.pt", help="the pretrained model")
-    parser.add_argument("-r", "--region", type=str, default="region", choices=["all", "region", "remain"], help="the evaluation region")
+    parser.add_argument("-p", "--ckpt", type=str, default="./runs/detect/11L_v0630_0623_0604+0604_bs64/weights/best.pt", help="the pretrained model")
+    parser.add_argument("-r", "--region", type=str, default="all", choices=["all", "region", "remain"], help="the evaluation region")
     args = parser.parse_args()
 
 
@@ -35,4 +35,4 @@ if __name__ == '__main__':
     model.overrides.update({'data':args.data_cfg})  # update new val dataset
     # vis(model)
     # pdb.set_trace()
-    metrics = model.val(validator=partial(CustomValidator, region=args.region))  
+    metrics = model.val(validator=partial(CustomValidator, region=args.region), max_det=50)  

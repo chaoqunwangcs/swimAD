@@ -520,7 +520,7 @@ def build_custom_dataset(cfg, img_path, batch, data, mode="train", rect=False, s
         fraction=cfg.fraction if mode == "train" else 1.0,
     )
 
-class CustomTrainer(SegmentationTrainer):
+class CustomTrainer(DetectionTrainer):
     def build_dataset(self, img_path, mode="train", batch=None):
         """
         Build YOLO Dataset for training or validation.
@@ -536,7 +536,7 @@ class CustomTrainer(SegmentationTrainer):
         gs = max(int(de_parallel(self.model).stride.max() if self.model else 0), 32)
         return build_custom_dataset(self.args, img_path, batch, self.data, mode=mode, rect=mode == "val", stride=gs)
 
-class CustomValidator(SegmentationValidator):
+class CustomValidator(DetectionValidator):
     def __init__(self, dataloader=None, save_dir=None, pbar=None, args=None, _callbacks=None, region='all'):
         """
         Initialize detection validator with necessary variables and settings.

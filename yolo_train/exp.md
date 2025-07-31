@@ -63,15 +63,15 @@ focal loss路径：/home/chaoqunwang/anaconda3/envs/swimAD/lib/python3.9/site-pa
 | 参数   | 值    | mAP50-90 | 备注 |
 |--------|-------|-----------|---|
 |mosaic  | 1.0   |  0.256    | 默认  |
-|mosaic  | 0.1   |           |  减少数据分布gap |
-|mosaic  | 0.0   |           |  减少数据分布gap |
+|mosaic  | 0.1   |  0.255    |  减少数据分布gap |
+|mosaic  | 0.0   |  0.251    |  减少数据分布gap |
 |cls     | 0.5   |  0.256    | 默认  |
-|cls     | 1.0   |           |  增大分类的权重 |
-|cls     | 1.5   |           |  增大分类的权重 |
+|cls     | 1.0   |  0.265    |  增大分类的权重 |
+|cls     | 1.5   |  0.254    |  增大分类的权重 |
 |imgsz   | 640   |  0.256    | 默认  |
-|imgsz   | 1280  |           | 增大分辨率，后续可用于蒸馏 |
-|rect    | False |           | 默认  |
-|rect    | True  |           | 仅尝试|
+|imgsz   | 1280  |  0.299    | 增大分辨率，后续可用于蒸馏 |
+|rect    | False |  0.256    | 默认  |
+|rect    | True  |  0.255    | 仅尝试|
 |topk    | 13    |  0.256    | 默认  |
 |topk    | 20    |           | 增大assinger中正样本的匹配数目|
 |cls_loss| BCE   |  0.256    | 默认  |

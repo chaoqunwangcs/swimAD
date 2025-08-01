@@ -29,26 +29,7 @@ check_gpus() {
         echo "找到满足条件的显卡ID：${eligible_gpus[@]}"
         echo "选择的显卡ID：${selected_gpus[@]}"
 
-        python train.py --cfg cfgs/model_yolo11l_v20250630_0623_0604.yaml --ckpt ../ckpts/yolo11s.pt --name 11S_v0630_0623_0604+0604_bs64 --device "$(IFS=,; echo "${selected_gpus[*]}")" --batch 64
-        python train.py --cfg cfgs/model_yolo11l_v20250630_0623_0604.yaml --ckpt ../ckpts/yolo11m.pt --name 11M_v0630_0623_0604+0604_bs64 --device "$(IFS=,; echo "${selected_gpus[*]}")" --batch 64
-        python train.py --cfg cfgs/model_yolo11l_v20250630_0623_0604.yaml --ckpt ../ckpts/yolo11l.pt --name 11L_v0630_0623_0604+0604_bs64 --device "$(IFS=,; echo "${selected_gpus[*]}")" --batch 64
-
-        python train.py --cfg cfgs/model_yolo11l_v20250630_0623.yaml --ckpt ../ckpts/yolo11s.pt --name 11S_v0630_0623+0604_bs64 --device "$(IFS=,; echo "${selected_gpus[*]}")" --batch 64
-        python train.py --cfg cfgs/model_yolo11l_v20250630_0623.yaml --ckpt ../ckpts/yolo11m.pt --name 11M_v0630_0623+0604_bs64 --device "$(IFS=,; echo "${selected_gpus[*]}")" --batch 64
-        python train.py --cfg cfgs/model_yolo11l_v20250630_0623.yaml --ckpt ../ckpts/yolo11l.pt --name 11L_v0630_0623+0604_bs64 --device "$(IFS=,; echo "${selected_gpus[*]}")" --batch 64
-
-        python train.py --cfg cfgs/model_yolo11l_v20250630.yaml --ckpt ../ckpts/yolo11s.pt --name 11S_v0630+0604_bs64 --device "$(IFS=,; echo "${selected_gpus[*]}")" --batch 64
-        python train.py --cfg cfgs/model_yolo11l_v20250630.yaml --ckpt ../ckpts/yolo11m.pt --name 11M_v0630+0604_bs64 --device "$(IFS=,; echo "${selected_gpus[*]}")" --batch 64
-        python train.py --cfg cfgs/model_yolo11l_v20250630.yaml --ckpt ../ckpts/yolo11l.pt --name 11L_v0630+0604_bs64 --device "$(IFS=,; echo "${selected_gpus[*]}")" --batch 64
-
-        python train.py --cfg cfgs/model_yolo11l_v20250630_shuffle.yaml --ckpt ../ckpts/yolo11s.pt --name 11S_v0630+0630shuffle_bs64 --device "$(IFS=,; echo "${selected_gpus[*]}")" --batch 64
-        python train.py --cfg cfgs/model_yolo11l_v20250630_shuffle.yaml --ckpt ../ckpts/yolo11m.pt --name 11M_v0630+0630shuffle_bs64 --device "$(IFS=,; echo "${selected_gpus[*]}")" --batch 64
-        python train.py --cfg cfgs/model_yolo11l_v20250630_shuffle.yaml --ckpt ../ckpts/yolo11l.pt --name 11L_v0630+0630shuffle_bs64 --device "$(IFS=,; echo "${selected_gpus[*]}")" --batch 64
-
-        python train.py --cfg cfgs/model_yolo11l_v20250604.yaml --ckpt ../ckpts/yolo11l.pt --name 11L_v0604+0604_bs64 --device "$(IFS=,; echo "${selected_gpus[*]}")" --batch 64
-        python train.py --cfg cfgs/model_yolo11l_v20250604_shuffle.yaml --ckpt ../ckpts/yolo11l.pt --name 11L_v0604+0604shuffle_bs64 --device "$(IFS=,; echo "${selected_gpus[*]}")" --batch 64
-        python train.py --cfg cfgs/model_yolo11l_v20250604_no_domain_gap.yaml --ckpt ../ckpts/yolo11l.pt --name 11L_v0604+0604noDomainGap_bs64 --device "$(IFS=,; echo "${selected_gpus[*]}")" --batch 64
-
+        python train.py --cfg cfgs/model_yolo11l_v20250728_0724_0630_0623_0604.yaml --ckpt ../ckpts/yolo11l.pt --name 11L_v0728_0724_0630_0623_0604+0604_bs64 --device "$(IFS=,; echo "${selected_gpus[*]}")" --batch 64
         return 0
     else
         echo "没有足够的显卡满足条件（至少需要两张显存大于20GB的显卡）。"

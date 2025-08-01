@@ -14,7 +14,6 @@ def parse_arguments():
     """
     使用 argparse 解析命令行参数
     """
-    
     parser = argparse.ArgumentParser(description=" ")
     parser.add_argument("-c", "--cfg", type=str, default="cfgs/model_yolo11l_v20250506.yaml", help="the training config")
     parser.add_argument("-n", "--name", type=str, default="val", help="the exp name")
@@ -23,15 +22,11 @@ def parse_arguments():
     parser.add_argument("-b", "--batch", type=int, default=64, help="the training batch size")
     parser.add_argument("-w", "--workers", type=int, default=16, help="the training dataloader workers")
     args = parser.parse_args()
-
-
-
     return args
 
 if __name__ == '__main__':
 
     args = parse_arguments()
-    # pdb.set_trace()
     model = YOLO(args.ckpt)  
     # debug. if the device id > 0 and only one device, it will used CUDA:0.
     device = args.device

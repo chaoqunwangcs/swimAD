@@ -23,15 +23,10 @@ def parse_arguments():
     parser.add_argument("-b", "--batch", type=int, default=128, help="the training batch size")
     parser.add_argument("-w", "--workers", type=int, default=16, help="the training dataloader workers")
     args = parser.parse_args()
-
-
-
     return args
 
 if __name__ == '__main__':
-
     args = parse_arguments()
-    # pdb.set_trace()
     model = YOLO(args.ckpt)  
     # debug. if the device id > 0 and only one device, it will used CUDA:0.
     device = args.device

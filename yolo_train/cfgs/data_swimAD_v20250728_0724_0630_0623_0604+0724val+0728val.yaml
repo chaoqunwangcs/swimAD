@@ -1,6 +1,6 @@
 path: /home/chaoqunwang/swimAD  
 train: ['data_transfer/yolo/dataset_v20250728_shuffle_train.txt', 'data_transfer/yolo/dataset_v20250724_shuffle_train.txt', 'data_transfer/yolo/dataset_v20250630_shuffle_train.txt', 'data_transfer/yolo/dataset_v20250630_shuffle_val.txt', 'data_transfer/yolo/dataset_v20250623_shuffle_train.txt', 'data_transfer/yolo/dataset_v20250623_shuffle_val.txt', 'data_transfer/yolo/dataset_v20250604_train.txt']
-val: ['data_transfer/yolo/dataset_v20250728_shuffle_val.txt', 'data_transfer/yolo/dataset_v20250724_shuffle_val.txt',]
+val: ['data_transfer/yolo/dataset_v20250728_shuffle_val.txt', 'data_transfer/yolo/dataset_v20250724_shuffle_val.txt']
 
 names: 
   0: ashore

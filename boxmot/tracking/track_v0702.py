@@ -381,7 +381,7 @@ class MyDetectionPredictor(yolo.detect.DetectionPredictor):
             overrides (dict | None): Configuration overrides.
             _callbacks (dict | None): Dictionary of callback functions.
         """
-        super().__init__(cfg, overrides, _callbacks)
+        # super().__init__(cfg, overrides, _callbacks)
 
         if 'calibration' in overrides:
             cfg.calibration = overrides['calibration']
@@ -1297,6 +1297,6 @@ def parse_opt():
 if __name__ == "__main__":
     opt = parse_opt()
     opt.metrics = opt.metrics.split(',')
-    track_controller = TrackManagerController(ttl=10, snapshot_interval=30, frame_window_span=30)
+    track_controller = TrackManagerController(ttl=10, snapshot_interval=30, frame_index=30)
     g_track_manager = track_controller.manager
     run(opt)

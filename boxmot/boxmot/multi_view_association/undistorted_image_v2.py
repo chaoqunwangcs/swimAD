@@ -22,18 +22,16 @@ dist_coeffs = np.array([k1, k2, p1, p2, k3], dtype=np.float32)
 # -------------------- 2. 六个畸变图像上的点 --------------------
 # 按需改成自己的 6 个点
 distorted_points = [
-    (51, 617),      # 6
-    (1955, 1849),   # 5
-    (3094, 590),    # 4
-    (1305, 370),    # 3
-    (915, 358),     # 2
-    (3, 559)        # 1
+    (102, 581),
+    (1046, 2016),
+    (3153, 329),
+    (2116, 45)
 ]
 
 # -------------------- 3. 读图并计算反畸变映射 --------------------
-image_path = "/home/chaoqunwang/swimAD/dataset/dataset_v20250804/video_1/1/1_1.jpg"
-output_original_points = "original_with_points.jpg"
-output_undistorted_points = "undistorted_with_points.jpg"
+image_path = "/home/chaoqunwang/swimAD/dataset/dataset_v20250804/video_1/2/1_1.jpg"
+output_original_points = "original_with_points_v2.jpg"
+output_undistorted_points = "undistorted_with_points_v2.jpg"
 
 image = cv2.imread(image_path)
 import pdb; pdb.set_trace()

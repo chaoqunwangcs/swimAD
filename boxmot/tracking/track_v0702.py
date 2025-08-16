@@ -473,7 +473,7 @@ class MyDetectionPredictor(yolo.detect.DetectionPredictor):
         if not self.model:
             self.setup_model(model)
 
-        if not hasattr(self, 'associator'):
+        if not hasattr(self, 'associator') or not self.associator:
             self.setup_associator(self.args.calibration)
 
         with self._lock:  # for thread-safe inference

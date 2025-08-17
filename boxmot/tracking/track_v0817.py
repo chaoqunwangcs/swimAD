@@ -75,7 +75,7 @@ from ultralytics.data.loaders import (
     autocast_list,
 )
 
-from boxmot.multi_view_association.test_stream_split import MultiViewAssociationStream, POOL_WIDTH, POOL_HEIGHT, \
+from boxmot.multi_view_association.test_stream_split_2views import MultiViewAssociationStream, POOL_WIDTH, POOL_HEIGHT, \
     MARGIN_WIDTH, MARGIN_HEIGHT, MAIN_VIEW
 
 import pdb
@@ -1115,17 +1115,17 @@ def run(args):
         img_view2 = plot_ids(r[1], line_width=yolo.predictor.args.line_width, boxes=yolo.predictor.args.show_boxes,
                              conf=yolo.predictor.args.show_conf, labels=yolo.predictor.args.show_labels,
                              im_gpu=r[1].orig_img)
-        img_view3 = plot_ids(r[2], line_width=yolo.predictor.args.line_width, boxes=yolo.predictor.args.show_boxes,
-                             conf=yolo.predictor.args.show_conf, labels=yolo.predictor.args.show_labels,
-                             im_gpu=r[2].orig_img)
-        img_view4 = plot_ids(r[3], line_width=yolo.predictor.args.line_width, boxes=yolo.predictor.args.show_boxes,
-                             conf=yolo.predictor.args.show_conf, labels=yolo.predictor.args.show_labels,
-                             im_gpu=r[3].orig_img)
+        # img_view3 = plot_ids(r[2], line_width=yolo.predictor.args.line_width, boxes=yolo.predictor.args.show_boxes,
+        #                      conf=yolo.predictor.args.show_conf, labels=yolo.predictor.args.show_labels,
+        #                      im_gpu=r[2].orig_img)
+        # img_view4 = plot_ids(r[3], line_width=yolo.predictor.args.line_width, boxes=yolo.predictor.args.show_boxes,
+        #                      conf=yolo.predictor.args.show_conf, labels=yolo.predictor.args.show_labels,
+        #                      im_gpu=r[3].orig_img)
 
         # main view det result
-        main_det = plot_ids(r[4], line_width=yolo.predictor.args.line_width, boxes=yolo.predictor.args.show_boxes,
+        main_det = plot_ids(r[-1], line_width=yolo.predictor.args.line_width, boxes=yolo.predictor.args.show_boxes,
                             conf=yolo.predictor.args.show_conf, labels=yolo.predictor.args.show_labels,
-                            im_gpu=r[4].orig_img)
+                            im_gpu=r[-1].orig_img)
         cv2.rectangle(main_det, (MARGIN_WIDTH, MARGIN_HEIGHT), (MARGIN_WIDTH + POOL_WIDTH, MARGIN_HEIGHT + POOL_HEIGHT),
                       (0, 255, 0), 3)  # plot the pool boundary
         main_det = cv2.resize(main_det, (main_det.shape[1], img_view1.shape[0] * 2), interpolation=cv2.INTER_LINEAR)
@@ -1133,7 +1133,8 @@ def run(args):
                     cv2.FONT_HERSHEY_SIMPLEX, 5, (255, 255, 255), thickness=5)
 
         # main view track result
-        main_track = yolo.predictor.trackers[0].plot_multi_view_results(r[4].orig_img, args.show_trajectories,
+        # pdb.set_trace()
+        main_track = yolo.predictor.trackers[0].plot_multi_view_results(r[-1].orig_img, args.show_trajectories,
                                                                         fontscale=3, thickness=5)
         cv2.rectangle(main_track, (MARGIN_WIDTH, MARGIN_HEIGHT),
                       (MARGIN_WIDTH + POOL_WIDTH, MARGIN_HEIGHT + POOL_HEIGHT), (0, 255, 0),
@@ -1144,15 +1145,15 @@ def run(args):
                     cv2.FONT_HERSHEY_SIMPLEX, 5, (255, 255, 255), thickness=5)
 
         # merge together
+        # pdb.set_trace()
         resize_factor = 0.5
-        canvas = np.hstack(
-            (np.vstack((np.hstack((img_view1, img_view2)), np.hstack((img_view3, img_view4)))), main_det, main_track))
+        canvas = np.hstack((np.vstack((img_view1, img_view2)), main_det, main_track))
         cv2.putText(canvas, f'{idx:04d}', ((canvas.shape[1] - 600), int(MARGIN_HEIGHT / 1.5)), cv2.FONT_HERSHEY_SIMPLEX,
                     5, (255, 255, 255), thickness=5)
         canvas = cv2.resize(canvas, None, fx=resize_factor, fy=resize_factor, interpolation=cv2.INTER_LINEAR)
 
-        cv2.imwrite('aa.jpg', canvas)
-        pdb.set_trace()
+        # cv2.imwrite('aa.jpg', canvas)
+        # pdb.set_trace()
         # swim AD rules:
         swimAD_results = yolo.predictor.trackers[0].detect_AD_v2(yolo.predictor.object_map, args.metrics)
 
@@ -1164,14 +1165,10 @@ def run(args):
             x1, y1, x2, y2 = x1 * resize_factor, y1 * resize_factor, x2 * resize_factor, y2 * resize_factor
             new_img_width, new_img_height = r[0].orig_shape[1] * resize_factor, r[0].orig_shape[0] * resize_factor
             if view == '2':
-                x1, x2 = x1 + new_img_width, x2 + new_img_width
-            if view == '3':
                 y1, y2 = y1 + new_img_height, y2 + new_img_height
-            if view == '4':
-                x1, y1, x2, y2 = x1 + new_img_width, y1 + new_img_height, x2 + new_img_width, y2 + new_img_height
-            if x1 > 2560 or x2 > 2560:
+            if x1 > 3200 or x2 > 3200:
                 pdb.set_trace()
-            if y1 > 1440 or y2 > 1440:
+            if y1 > 1800 or y2 > 1800:
                 pdb.set_trace()
             swimAD_results[obj_id]['bbox_left_top'] = [x1, y1]
             swimAD_results[obj_id]['bbox_right_bottom'] = [x2, y2]

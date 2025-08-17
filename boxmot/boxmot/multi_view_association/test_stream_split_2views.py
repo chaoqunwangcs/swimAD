@@ -168,14 +168,14 @@ class View(object):
         if name != MAIN_VIEW:
             self.set_region()
 
-        self.set_camera_matrix()
+        # self.set_camera_matrix()
 
     def set_region(self):
         # self.polygon = [list(map(int, self.grid_info[0][0])), list(map(int, self.grid_info[0][1])), list(map(int, self.grid_info[1][1])), list(map(int, self.grid_info[1][0]))] #clockwise
         if self.name == '1':
-            self.polygon = [[255.62,  638.36], [1902.94, 1604.60], [2905.95,  623.36], [1420.11,  502.59]]
+            self.polygon = [[256,  638], [1903, 1605], [2906,  623], [1420,  503]]
         elif self.name == '2':
-            self.polygon = [322.18,  610.66], [1183.97, 1779.47], [3015.56,  380.79], [2021.24,  242.55]
+            self.polygon = [322,  611], [1194, 1920], [3016,  381], [2021,  243]
         self.polygon_array = np.array(self.polygon)
 
         """
@@ -208,7 +208,7 @@ class View(object):
         output:
             the self camera_matrix roi and mapx mapy
         '''
-        w, h = POOL_WIDTH, POOL_HEIGHT
+        w, h = WIDTH, HEIGHT
         fx = self.fx * (self.fx_ratio if hasattr(self, 'fx_ratio') else 1.0)
         fy = self.fy * (self.fy_ratio if hasattr(self, 'fy_ratio') else 1.0)
         cx, cy = self.cx, self.cy
@@ -384,7 +384,7 @@ class MultiViewAssociationStream(object):
         with open(self.grid_root, 'r') as f:
             grid_info = json.load(f)
 
-        self.main_view = View(MAIN_VIEW, p1=0, p2=0, k1=0, k2=0, k3=0, fx=1280, fy=720, cx=1280, cy=720, fx_ratio=1.0,
+        self.main_view = View(MAIN_VIEW, p1=0, p2=0, k1=0, k2=0, k3=0, fx=WIDTH/2, fy=HEIGHT/2, cx=WIDTH/2, cy=HEIGHT/2, fx_ratio=1.0,
                               fy_ratio=1.0, grid_info=None)
         # view1 = View('1', p1=0, p2=0, k1=-0.5353, k2=0.2875, k3=-0.0906, fx=1621.9, fy=1856.1, cx=1116.3, cy=742.9178,
         #              fx_ratio=1.33, fy_ratio=1.33, grid_info=grid_info[0])
@@ -398,8 +398,8 @@ class MultiViewAssociationStream(object):
 
         view1 = View('1', p1=0, p2=0, k1=-0.3957, k2=0.1834, k3=-0.0504, fx=2383.2, fy=2377.5, cx=1627.9, cy=869.4700,
                      fx_ratio=1, fy_ratio=1, grid_info=grid_info[0])
-        view2 = View('2', p1=0, p2=0, k1=-0.5153, k2=0.2845, k3=-0.0906, fx=1621.9, fy=1856.1, cx=1116.3, cy=742.9178,
-                     fx_ratio=1.34, fy_ratio=1.34, grid_info=grid_info[1])
+        view2 = View('2', p1=0, p2=0, k1=-0.3957, k2=0.1834, k3=-0.0504, fx=2383.2, fy=2377.5, cx=1627.9, cy=869.4700,
+                     fx_ratio=1, fy_ratio=1, grid_info=grid_info[1])
         self.views = [view1, view2] 
 
     def init_view_association(self):
@@ -540,23 +540,27 @@ class AssociationData(object):
                     main_view_data.append([box.projection(views_projections), view.name,
                                            (box.original_x1, box.original_y1, box.original_x2, box.original_y2)])
             # plot box on source view both original and anti_distorted image
-        #     source_img = cv2.imread(box.image_path)
-        #     anti_distorted_source_img = view.anti_distortion(source_img)
-        #     anti_distorted_source_img = view.draw_polygon(anti_distorted_source_img)
+            # if len(view_data) > 0:
+            #     source_img = cv2.imread(box.image_path)
+            #     anti_distorted_source_img = view.anti_distortion(source_img)
+            #     anti_distorted_source_img = view.draw_polygon(anti_distorted_source_img)
+            #     cv2.imwrite(f'{view.name}.jpg', anti_distorted_source_img)
+                # pdb.set_trace()
 
-        #     for idx, box in enumerate(view_data):
-        #         cv2.rectangle(anti_distorted_source_img, (int(box.x1), int(box.y1)), (int(box.x2), int(box.y2)), (0,255,0), 3)
-        #         cv2.putText(anti_distorted_source_img, str(idx), (int(box.x1), int(box.y1)-20), cv2.FONT_HERSHEY_SIMPLEX, 3, (0,255,0), thickness=3)
+        #         for idx, box in enumerate(view_data):
+        #             cv2.rectangle(anti_distorted_source_img, (int(box.x1), int(box.y1)), (int(box.x2), int(box.y2)), (0,255,0), 3)
+        #             cv2.putText(anti_distorted_source_img, str(idx), (int(box.x1), int(box.y1)-20), cv2.FONT_HERSHEY_SIMPLEX, 3, (0,255,0), thickness=3)
 
-        #     main_view = np.zeros((CANVAS_HEIGHT, CANVAS_WIDTH, 3), dtype=np.uint8)
-        #     cv2.rectangle(main_view, (0,0), (CANVAS_WIDTH, CANVAS_HEIGHT), (0,255,0), 3)
-        #     for idx, box in enumerate(tmp):
-        #         cv2.rectangle(main_view, (int(box.x1), int(box.y1)), (int(box.x2), int(box.y2)), (0,255,0), 3)
-        #         cv2.putText(main_view, str(flag[idx]), (int(box.x1), int(box.y1)-30), cv2.FONT_HERSHEY_SIMPLEX, 3, (0,255,0), thickness=3)
+        #         main_view = np.zeros((CANVAS_HEIGHT, CANVAS_WIDTH, 3), dtype=np.uint8)
+        #         cv2.rectangle(main_view, (0,0), (CANVAS_WIDTH, CANVAS_HEIGHT), (0,255,0), 3)
+        #         for idx, box in enumerate(tmp):
+        #             cv2.rectangle(main_view, (int(box.x1), int(box.y1)), (int(box.x2), int(box.y2)), (0,255,0), 3)
+        #             cv2.putText(main_view, str(flag[idx]), (int(box.x1), int(box.y1)-30), cv2.FONT_HERSHEY_SIMPLEX, 3, (0,255,0), thickness=3)
 
-        #     main_view = cv2.resize(main_view, (int(main_view.shape[1]*(anti_distorted_source_img.shape[0]/main_view.shape[0])), anti_distorted_source_img.shape[0]),interpolation=cv2.INTER_LINEAR)
-        #     img = np.hstack((anti_distorted_source_img, main_view))
-        #     all_view_imgs.append(img)
+        #         main_view = cv2.resize(main_view, (int(main_view.shape[1]*(anti_distorted_source_img.shape[0]/main_view.shape[0])), anti_distorted_source_img.shape[0]),interpolation=cv2.INTER_LINEAR)
+        #         img = np.hstack((anti_distorted_source_img, main_view))
+        #         all_view_imgs.append(img)   
+
         # all_main_view = np.zeros((CANVAS_HEIGHT, CANVAS_WIDTH, 3), dtype=np.uint8)
         # cv2.rectangle(all_main_view, (0,0), (CANVAS_WIDTH, CANVAS_HEIGHT), (0,255,0), 3)
         # for idx, box in enumerate(main_view_data):
@@ -566,7 +570,7 @@ class AssociationData(object):
 
         # canvas = np.hstack((np.vstack((np.hstack((all_view_imgs[0], all_view_imgs[1])), np.hstack((all_view_imgs[2], all_view_imgs[3])))),all_main_view))
         # cv2.imwrite(f'aa.jpg', canvas)
-        # pdb.set_trace()
+        # pdb.set_trace()                     
         # return canvas
         # pdb.set_trace() 
         # merge by the region

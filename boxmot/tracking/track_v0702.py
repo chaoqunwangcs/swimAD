@@ -765,6 +765,7 @@ def on_predict_postprocess_end(predictor: Union[object, MyDetectionPredictor], p
 
     # 提取每个视角的检测框信息（并剔除 cls_id == 0 的 ashore person）
     detections_by_view = extract_detections_by_view(predictor, is_obb)
+    import pdb; pdb.set_trace()
     if len(detections_by_view) != len(predictor.associator.views):
         logger.warning(
             f"Views mismatch: {len(detections_by_view)} dets vs {len(predictor.associator.views)} associator views.")

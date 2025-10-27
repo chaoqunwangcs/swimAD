@@ -411,19 +411,19 @@ class MultiViewAssociationStream(object):
             init the view name p1~p3, k1~k2
             init the grid-wise weight used for multi view association
         '''
-        with open(self.grid_root, 'r') as f:
-            grid_info = json.load(f)
+        # with open(self.grid_root, 'r') as f:
+        #     grid_info = json.load(f)
 
         self.main_view = View(MAIN_VIEW, p1=0, p2=0, k1=0, k2=0, k3=0, fx=1280, fy=720, cx=1280, cy=720, fx_ratio=1.0,
                               fy_ratio=1.0, grid_info=None)
         view1 = View('1', p1=0, p2=0, k1=-0.5353, k2=0.2875, k3=-0.0906, fx=1621.9, fy=1856.1, cx=1116.3, cy=742.9178,
-                     fx_ratio=1.33, fy_ratio=1.33, grid_info=grid_info[0])
+                     fx_ratio=1.33, fy_ratio=1.33, grid_info=None)
         view2 = View('2', p1=0, p2=0, k1=-0.5153, k2=0.2845, k3=-0.0906, fx=1621.9, fy=1856.1, cx=1116.3, cy=742.9178,
-                     fx_ratio=1.34, fy_ratio=1.34, grid_info=grid_info[1])
+                     fx_ratio=1.34, fy_ratio=1.34, grid_info=None)
         view3 = View('3', p1=0, p2=0, k1=-0.5253, k2=0.2845, k3=-0.0906, fx=1621.9, fy=1856.1, cx=1116.3, cy=742.9178,
-                     fx_ratio=1.34, fy_ratio=1.34, grid_info=grid_info[2])
+                     fx_ratio=1.34, fy_ratio=1.34, grid_info=None)
         view4 = View('4', p1=0, p2=0, k1=-0.5253, k2=0.2875, k3=-0.0906, fx=1621.9, fy=1856.1, cx=1116.3, cy=742.9178,
-                     fx_ratio=1.34, fy_ratio=1.34, grid_info=grid_info[3])
+                     fx_ratio=1.34, fy_ratio=1.34, grid_info=None)
         self.views = [view1, view2, view3, view4]
 
     def init_view_association(self):

@@ -75,4 +75,5 @@ def create_tracker(
         tracker_args['per_class'] = per_class
 
     # Return the instantiated tracker class with arguments
+    import pdb; pdb.set_trace()
     return tracker_class(**tracker_args)

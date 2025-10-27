@@ -116,9 +116,11 @@ class BaseTracker(BaseRules):
         This ensures that initialization tasks (like setting the association function) only
         happen once, on the first frame, and are skipped on subsequent frames.
         """
+        
         def wrapper(self, *args, **kwargs):
             # If setup hasn't been done yet, perform it
             # Even if dets is empty (e.g., shape (0, 7)), this check will still pass if it's Nx7
+            # import pdb; pdb.set_trace()
             if not self._first_dets_processed:
                 dets = args[0]
                 if dets is not None:

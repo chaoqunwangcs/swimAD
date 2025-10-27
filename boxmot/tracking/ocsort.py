@@ -9,10 +9,12 @@ import sys
 import hashlib
 import colorsys
 import yaml
+import torch
 
 import cv2 as cv
 import numpy as np
 import numpy.linalg as linalg
+
 
 from copy import deepcopy
 from itertools import islice
@@ -24,7 +26,6 @@ from filterpy.common import pretty_str, reshape_z
 from numpy import dot, zeros, eye, isscalar, shape
 
 from boxmot.utils import logger as LOGGER
-
 import pdb
 
 def linear_assignment(cost_matrix):
@@ -55,43 +56,6 @@ def speed_direction_batch(dets, tracks):
     dy = dy / norm
     return dy, dx  # size: num_track x num_det
 
-def speed_direction_obb(bbox1, bbox2):
-    cx1, cy1 = bbox1[0], bbox1[1]
-    cx2, cy2 = bbox2[0], bbox2[1]
-    speed = np.array([cy2 - cy1, cx2 - cx1])
-    norm = np.sqrt((cy2 - cy1) ** 2 + (cx2 - cx1) ** 2) + 1e-6
-    return speed / norm
-
-def k_previous_obs(observations, cur_age, k, is_obb=False):
-    if len(observations) == 0:
-        if is_obb:
-            return [-1, -1, -1, -1, -1, -1]
-        else :
-            return [-1, -1, -1, -1, -1]
-    for i in range(k):
-        dt = k - i
-        if cur_age - dt in observations:
-            return observations[cur_age - dt]
-    max_age = max(observations.keys())
-    return observations[max_age]
-
-def convert_x_to_bbox(x, score=None):
-    """
-    Takes a bounding box in the centre form [x,y,s,r] and returns it in the form
-      [x1,y1,x2,y2] where x1,y1 is the top left and x2,y2 is the bottom right
-    """
-    w = np.sqrt(x[2] * x[3])
-    h = x[2] / w
-    if score is None:
-        return np.array(
-            [x[0] - w / 2.0, x[1] - h / 2.0, x[0] + w / 2.0, x[1] + h / 2.0]
-        ).reshape((1, 4))
-    else:
-        return np.array(
-            [x[0] - w / 2.0, x[1] - h / 2.0, x[0] + w / 2.0, x[1] + h / 2.0, score]
-        ).reshape((1, 5))
-
-
 def associate(
     detections,
     trackers,
@@ -108,6 +72,7 @@ def associate(
     aw_param=None,
     
 ):
+    # pdb.set_trace()
     if len(trackers) == 0:
         return (
             np.empty((0, 2), dtype=int),
@@ -183,6 +148,7 @@ def associate(
 
     return matches, np.array(unmatched_detections), np.array(unmatched_trackers)
 
+
 def xyxy2xysr(x):
     """
     Converts bounding box coordinates from (x1, y1, x2, y2) format to (x, y, s, r) format.
@@ -206,78 +172,120 @@ def xyxy2xysr(x):
     y = y.reshape((4, 1))
     return y
 
-class AssociationFunction:
-    def __init__(self, w, h, asso_mode="iou"):
-        """
-        Initializes the AssociationFunction class with the necessary parameters for bounding box operations.
-        The association function is selected based on the `asso_mode` string provided during class creation.
+
+def k_previous_obs(observations, cur_age, k, is_obb=False):
+    if len(observations) == 0:
+        if is_obb:
+            return [-1, -1, -1, -1, -1, -1]
+        else :
+            return [-1, -1, -1, -1, -1]
+    for i in range(k):
+        dt = k - i
+        if cur_age - dt in observations:
+            return observations[cur_age - dt]
+    max_age = max(observations.keys())
+    return observations[max_age]
+
+
+def convert_x_to_bbox(x, score=None):
+    """
+    Takes a bounding box in the centre form [x,y,s,r] and returns it in the form
+      [x1,y1,x2,y2] where x1,y1 is the top left and x2,y2 is the bottom right
+    """
+    w = np.sqrt(x[2] * x[3])
+    h = x[2] / w
+    if score is None:
+        return np.array(
+            [x[0] - w / 2.0, x[1] - h / 2.0, x[0] + w / 2.0, x[1] + h / 2.0]
+        ).reshape((1, 4))
+    else:
+        return np.array(
+            [x[0] - w / 2.0, x[1] - h / 2.0, x[0] + w / 2.0, x[1] + h / 2.0, score]
+        ).reshape((1, 5))
+
+
+def setup_decorator(method):
+    """
+    Decorator to perform setup on the first frame only.
+    This ensures that initialization tasks (like setting the association function) only
+    happen once, on the first frame, and are skipped on subsequent frames.
+    """
+    
+    def wrapper(self, *args, **kwargs):
+        # If setup hasn't been done yet, perform it
+        # Even if dets is empty (e.g., shape (0, 7)), this check will still pass if it's Nx7
+        # import pdb; pdb.set_trace()
+        if not self._first_dets_processed:
+            dets = args[0]
+            if dets is not None:
+                if dets.ndim == 2 and dets.shape[1] == 6:
+                    self.is_obb = False
+                    self._first_dets_processed = True
+                elif dets.ndim == 2 and dets.shape[1] == 7:
+                    self.is_obb = True
+                    self._first_dets_processed = True
+
+        if not self._first_frame_processed:
+            img = args[1]
+            self.h, self.w = img.shape[0:2]
+            self.asso_func = AssociationFunction(w=self.w, h=self.h, asso_mode=self.asso_func_name).asso_func
+
+            # Mark that the first frame setup has been done
+            self._first_frame_processed = True
+
+        # Call the original method (e.g., update)
+        return method(self, *args, **kwargs)
+    
+    return wrapper
+
+
+def per_class_decorator(update_method):
+    """
+    Decorator for the update method to handle per-class processing.
+    """
+    def wrapper(self, dets: np.ndarray, img: np.ndarray, embs: np.ndarray = None):
         
-        Parameters:
-        w (int): The width of the frame, used for normalizing centroid distance.
-        h (int): The height of the frame, used for normalizing centroid distance.
-        asso_mode (str): The association function to use (e.g., "iou", "giou", "centroid", etc.).
-        """
-        self.w = w
-        self.h = h
-        self.asso_mode = asso_mode
-        self.asso_func = self._get_asso_func(asso_mode)
-
-    @staticmethod
-    def iou_batch(bboxes1, bboxes2) -> np.ndarray:
-        bboxes2 = np.expand_dims(bboxes2, 0)
-        bboxes1 = np.expand_dims(bboxes1, 1)
-
-        xx1 = np.maximum(bboxes1[..., 0], bboxes2[..., 0])
-        yy1 = np.maximum(bboxes1[..., 1], bboxes2[..., 1])
-        xx2 = np.minimum(bboxes1[..., 2], bboxes2[..., 2])
-        yy2 = np.minimum(bboxes1[..., 3], bboxes2[..., 3])
-        w = np.maximum(0.0, xx2 - xx1)
-        h = np.maximum(0.0, yy2 - yy1)
-        wh = w * h
-        o = wh / (
-            (bboxes1[..., 2] - bboxes1[..., 0]) * (bboxes1[..., 3] - bboxes1[..., 1]) +
-            (bboxes2[..., 2] - bboxes2[..., 0]) * (bboxes2[..., 3] - bboxes2[..., 1]) -
-            wh
-        )
-        return o    
-
-    @staticmethod
-    def iou_batch_obb(bboxes1, bboxes2) -> np.ndarray:
-
-        N, M = len(bboxes1), len(bboxes2)
-
-        def wrapper(i, j):
-            return iou_obb_pair(i, j, bboxes1, bboxes2)
+        #handle different types of inputs
+        if dets is None or len(dets) == 0:
+            dets = np.empty((0, 6))
         
-        iou_matrix = np.fromfunction(np.vectorize(wrapper), shape=(N, M), dtype=int)
-        return iou_matrix
+        if self.per_class:
+            # Initialize an array to store the tracks for each class
+            per_class_tracks = []
+            
+            # same frame count for all classes
+            frame_count = self.frame_count
 
+            for cls_id in range(self.nr_classes):
+                # Get detections and embeddings for the current class
+                class_dets, class_embs = self.get_class_dets_n_embs(dets, embs, cls_id)
+                
+                LOGGER.debug(f"Processing class {int(cls_id)}: {class_dets.shape} with embeddings {class_embs.shape if class_embs is not None else None}")
 
-    @staticmethod
-    def run_asso_func(self, bboxes1, bboxes2):
-        """
-        Runs the selected association function (based on the initialization string) on the input bounding boxes.
-        
-        Parameters:
-        bboxes1: First set of bounding boxes.
-        bboxes2: Second set of bounding boxes.
-        """
-        return self.asso_func(bboxes1, bboxes2)
+                # Activate the specific active tracks for this class id
+                self.active_tracks = self.per_class_active_tracks[cls_id]
+                
+                # Reset frame count for every class
+                self.frame_count = frame_count
+                
+                # Update detections using the decorated method
+                tracks = update_method(self, dets=class_dets, img=img, embs=class_embs)
 
-    def _get_asso_func(self, asso_mode):
-        """
-        Returns the corresponding association function based on the provided mode string.
-        
-        Parameters:
-        asso_mode (str): The association function to use (e.g., "iou", "giou", "centroid", etc.).
-        
-        Returns:
-        function: The appropriate function for the association calculation.
-        """
-        ASSO_FUNCS = {
-            "iou": AssociationFunction.iou_batch
-        }
-        return ASSO_FUNCS[self.asso_mode]
+                # Save the updated active tracks
+                self.per_class_active_tracks[cls_id] = self.active_tracks
+
+                if tracks.size > 0:
+                    per_class_tracks.append(tracks)
+            
+            # Increase frame count by 1
+            self.frame_count = frame_count + 1
+
+            return np.vstack(per_class_tracks) if per_class_tracks else np.empty((0, 8))
+        else:
+            # Process all detections at once if per_class is False
+            return update_method(self, dets=dets, img=img, embs=embs)
+    return wrapper
+
 
 class KalmanFilterXYSR(object):
     """ Implements a Kalman filter. You are responsible for setting the
@@ -498,140 +506,78 @@ class KalmanFilterXYSR(object):
         # save history of observations
         self.history_obs.append(z)
 
-
-class KalmanBoxTrackerOBB(object):
-    """
-    This class represents the internal state of individual tracked objects observed as oriented bbox.
-    """
-
-    count = 0
-
-    def __init__(self, bbox, cls, det_ind, delta_t=3, max_obs=50, Q_xy_scaling = 0.01, Q_a_scaling = 0.01):
+class AssociationFunction:
+    def __init__(self, w, h, asso_mode="iou"):
         """
-        Initialises a tracker using initial bounding box.
+        Initializes the AssociationFunction class with the necessary parameters for bounding box operations.
+        The association function is selected based on the `asso_mode` string provided during class creation.
+        
+        Parameters:
+        w (int): The width of the frame, used for normalizing centroid distance.
+        h (int): The height of the frame, used for normalizing centroid distance.
+        asso_mode (str): The association function to use (e.g., "iou", "giou", "centroid", etc.).
         """
-        # define constant velocity model
-        self.det_ind = det_ind
+        self.w = w
+        self.h = h
+        self.asso_mode = asso_mode
+        self.asso_func = self._get_asso_func(asso_mode)
 
-        self.Q_xy_scaling = Q_xy_scaling
-        self.Q_a_scaling = Q_a_scaling
+    @staticmethod
+    def iou_batch(bboxes1, bboxes2) -> np.ndarray:
+        bboxes2 = np.expand_dims(bboxes2, 0)
+        bboxes1 = np.expand_dims(bboxes1, 1)
 
-        self.kf = KalmanFilterXYWHA(dim_x=10, dim_z=5, max_obs=max_obs)
-        self.kf.F = np.array(
-            [
-                [1, 0, 0, 0, 0, 1, 0, 0, 0, 0],  # cx = cx + vx
-                [0, 1, 0, 0, 0, 0, 1, 0, 0, 0],  # cy = cy + vy
-                [0, 0, 1, 0, 0, 0, 0, 1, 0, 0],  # w = w + vw
-                [0, 0, 0, 1, 0, 0, 0, 0, 1, 0],  # h = h + vh
-                [0, 0, 0, 0, 1, 0, 0, 0, 0, 1],  # a = a + va
-                [0, 0, 0, 0, 0, 1, 0, 0, 0, 0], 
-                [0, 0, 0, 0, 0, 0, 1, 0, 0, 0], 
-                [0, 0, 0, 0, 0, 0, 0, 1, 0, 0], 
-                [0, 0, 0, 0, 0, 0, 0, 0, 1, 0], 
-                [0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
-        ] 
-    )
-        self.kf.H = np.array(
-            [
-                [1, 0, 0, 0, 0, 0, 0, 0, 0 ,0],  # cx
-                [0, 1, 0, 0, 0, 0, 0, 0, 0, 0],  # cy
-                [0, 0, 1, 0, 0, 0, 0, 0, 0, 0],  # w
-                [0, 0, 0, 1, 0, 0, 0, 0, 0, 0],  # h
-                [0, 0, 0, 0, 1, 0, 0, 0, 0, 0],  # angle
-    ]
+        xx1 = np.maximum(bboxes1[..., 0], bboxes2[..., 0])
+        yy1 = np.maximum(bboxes1[..., 1], bboxes2[..., 1])
+        xx2 = np.minimum(bboxes1[..., 2], bboxes2[..., 2])
+        yy2 = np.minimum(bboxes1[..., 3], bboxes2[..., 3])
+        w = np.maximum(0.0, xx2 - xx1)
+        h = np.maximum(0.0, yy2 - yy1)
+        wh = w * h
+        o = wh / (
+            (bboxes1[..., 2] - bboxes1[..., 0]) * (bboxes1[..., 3] - bboxes1[..., 1]) +
+            (bboxes2[..., 2] - bboxes2[..., 0]) * (bboxes2[..., 3] - bboxes2[..., 1]) -
+            wh
         )
+        return o    
 
-        self.kf.R[2:, 2:] *= 10.0
-        self.kf.P[
-            5:, 5:
-        ] *= 1000.0  # give high uncertainty to the unobservable initial velocities
-        self.kf.P *= 10.0
+    @staticmethod
+    def iou_batch_obb(bboxes1, bboxes2) -> np.ndarray:
 
-        self.kf.Q[5:7, 5:7] *= self.Q_xy_scaling
-        self.kf.Q[-1, -1] *= self.Q_a_scaling
+        N, M = len(bboxes1), len(bboxes2)
 
-        self.kf.x[:5] = bbox[:5].reshape((5, 1)) # x, y, w, h, angle   (dont take confidence score)
-        self.time_since_update = 0
-        self.id = KalmanBoxTrackerOBB.count
-        KalmanBoxTrackerOBB.count += 1
-        self.max_obs = max_obs
-        self.history = deque([], maxlen=self.max_obs)
-        self.hits = 0
-        self.hit_streak = 0
-        self.age = 0
-        self.conf = bbox[-1]
-        self.cls = cls
+        def wrapper(i, j):
+            return iou_obb_pair(i, j, bboxes1, bboxes2)
+        
+        iou_matrix = np.fromfunction(np.vectorize(wrapper), shape=(N, M), dtype=int)
+        return iou_matrix
+
+
+    @staticmethod
+    def run_asso_func(self, bboxes1, bboxes2):
         """
-        NOTE: [-1,-1,-1,-1,-1] is a compromising placeholder for non-observation status, the same for the return of
-        function k_previous_obs. It is ugly and I do not like it. But to support generate observation array in a
-        fast and unified way, which you would see below k_observations = np.array([k_previous_obs(...]]),
-        let's bear it for now.
+        Runs the selected association function (based on the initialization string) on the input bounding boxes.
+        
+        Parameters:
+        bboxes1: First set of bounding boxes.
+        bboxes2: Second set of bounding boxes.
         """
-        self.last_observation = np.array([-1, -1, -1, -1, -1, -1])  #WARNING : -1 is a valid angle value 
-        self.observations = dict()
-        self.history_observations = deque([], maxlen=self.max_obs)
-        self.velocity = None
-        self.delta_t = delta_t
+        return self.asso_func(bboxes1, bboxes2)
 
-    def update(self, bbox, cls, det_ind):
+    def _get_asso_func(self, asso_mode):
         """
-        Updates the state vector with observed bbox.
+        Returns the corresponding association function based on the provided mode string.
+        
+        Parameters:
+        asso_mode (str): The association function to use (e.g., "iou", "giou", "centroid", etc.).
+        
+        Returns:
+        function: The appropriate function for the association calculation.
         """
-        self.det_ind = det_ind
-        if bbox is not None:
-            self.conf = bbox[-1]
-            self.cls = cls
-            if self.last_observation.sum() >= 0:  # no previous observation
-                previous_box = None
-                for i in range(self.delta_t):
-                    dt = self.delta_t - i
-                    if self.age - dt in self.observations:
-                        previous_box = self.observations[self.age - dt]
-                        break
-                if previous_box is None:
-                    previous_box = self.last_observation
-                """
-                  Estimate the track speed direction with observations \Delta t steps away
-                """
-                self.velocity = speed_direction_obb(previous_box, bbox)
-
-            """
-              Insert new observations. This is a ugly way to maintain both self.observations
-              and self.history_observations. Bear it for the moment.
-            """
-            self.last_observation = bbox
-            self.observations[self.age] = bbox
-            self.history_observations.append(bbox)
-
-            self.time_since_update = 0
-            self.hits += 1
-            self.hit_streak += 1
-            self.kf.update(bbox[:5].reshape((5, 1))) # x, y, w, h, angle as column vector   (dont take confidence score)
-        else:
-            self.kf.update(bbox)
-
-    def predict(self):
-        """
-        Advances the state vector and returns the predicted bounding box estimate.
-        """
-        if (self.kf.x[7] + self.kf.x[2]) <= 0: # Negative width
-            self.kf.x[7] *= 0.0
-        if (self.kf.x[8] + self.kf.x[3]) <= 0: # Negative Height
-            self.kf.x[8] *= 0.0
-        self.kf.predict()
-        self.age += 1
-        if self.time_since_update > 0:
-            self.hit_streak = 0
-        self.time_since_update += 1
-        self.history.append(self.kf.x[0:5].reshape((1, 5)))
-        return self.history[-1]
-
-    def get_state(self):
-        """
-        Returns the current bounding box estimate.
-        """
-        return self.kf.x[0:5].reshape((1, 5))
-
+        ASSO_FUNCS = {
+            "iou": AssociationFunction.iou_batch
+        }
+        return ASSO_FUNCS[self.asso_mode]
 
 class KalmanBoxTracker(object):
     """
@@ -681,6 +627,7 @@ class KalmanBoxTracker(object):
         self.kf.Q[4:6, 4:6] *= self.Q_xy_scaling
         self.kf.Q[-1, -1] *= self.Q_s_scaling
 
+        # pdb.set_trace()
         self.kf.x[:4] = xyxy2xysr(bbox)
         self.time_since_update = 0
         self.id = KalmanBoxTracker.count
@@ -732,6 +679,8 @@ class KalmanBoxTracker(object):
             """
             self.last_observation = bbox
             self.observations[self.age] = bbox
+            # pdb.set_trace()
+            # self.history_observations.append(bbox)  
             self.history_observations.append(np.append(bbox, cls))  # add the cls label for swimAD
 
             self.time_since_update = 0
@@ -794,19 +743,31 @@ class OcSort(ABC):
         use_byte: bool = False,
         Q_xy_scaling: float = 0.01,
         Q_s_scaling: float = 0.0001,
-        iou_threshold: float = 0.3,
+        iou_threshold: float = 0.3, # new para
         max_obs: int = 50,
         nr_classes: int = 80,
         is_obb: bool = False
     ):
+        # super().__init__(max_age=max_age, per_class=per_class, asso_func=asso_func)
         """
         Sets key parameters for SORT
         """
-        self.det_thresh = det_thresh
+        self.per_class = per_class
+        self.min_conf = min_conf
         self.max_age = max_age
-        self.max_obs = max_obs
         self.min_hits = min_hits
-        self.per_class = per_class  # Track per class or not
+        self.asso_threshold = asso_threshold
+        self.frame_count = 0
+        self.det_thresh = det_thresh
+        self.delta_t = delta_t
+        self.inertia = inertia
+        self.use_byte = use_byte
+        self.Q_xy_scaling = Q_xy_scaling
+        self.Q_s_scaling = Q_s_scaling
+        KalmanBoxTracker.count = 0
+
+        self.det_thresh = 0.3
+        self.max_obs = max_obs
         self.nr_classes = nr_classes
         self.iou_threshold = iou_threshold
         self.last_emb_size = None
@@ -818,13 +779,11 @@ class OcSort(ABC):
         self.per_class_active_tracks = None
         self._first_frame_processed = False  # Flag to track if the first frame has been processed
         self._first_dets_processed = False
-
         self.cls_map = {
             '0': 'ashore',
             '1': 'above',
             '2': 'under'
         }
-
         # Initialize per-class active tracks
         if self.per_class:
             self.per_class_active_tracks = {}
@@ -834,100 +793,10 @@ class OcSort(ABC):
         if self.max_age >= self.max_obs:
             LOGGER.warning("Max age > max observations, increasing size of max observations...")
             self.max_obs = self.max_age + 5
-            print("self.max_obs", self.max_obs)
-
-        self.min_conf = min_conf
-        self.asso_threshold = asso_threshold
-        self.delta_t = delta_t
-        self.inertia = inertia
-        self.use_byte = use_byte
-        self.Q_xy_scaling = Q_xy_scaling
-        self.Q_s_scaling = Q_s_scaling
-        KalmanBoxTracker.count = 0
+            print("self.max_obs", self.max_obs) 
 
         self.Window_Size = 50
 
-
-    # @staticmethod
-    def setup_decorator(method):
-        """
-        Decorator to perform setup on the first frame only.
-        This ensures that initialization tasks (like setting the association function) only
-        happen once, on the first frame, and are skipped on subsequent frames.
-        """
-        def wrapper(self, *args, **kwargs):
-            # If setup hasn't been done yet, perform it
-            # Even if dets is empty (e.g., shape (0, 7)), this check will still pass if it's Nx7
-            if not self._first_dets_processed:
-                dets = args[0]
-                if dets is not None:
-                    if dets.ndim == 2 and dets.shape[1] == 6:
-                        self.is_obb = False
-                        self._first_dets_processed = True
-                    elif dets.ndim == 2 and dets.shape[1] == 7:
-                        self.is_obb = True
-                        self._first_dets_processed = True
-
-            if not self._first_frame_processed:
-                img = args[1]
-                self.h, self.w = img.shape[0:2]
-                self.asso_func = AssociationFunction(w=self.w, h=self.h, asso_mode=self.asso_func_name).asso_func
-
-                # Mark that the first frame setup has been done
-                self._first_frame_processed = True
-
-            # Call the original method (e.g., update)
-            return method(self, *args, **kwargs)
-        
-        return wrapper
-
-    # @staticmethod
-    def per_class_decorator(update_method):
-        """
-        Decorator for the update method to handle per-class processing.
-        """
-        def wrapper(self, dets: np.ndarray, img: np.ndarray, embs: np.ndarray = None):
-            
-            #handle different types of inputs
-            if dets is None or len(dets) == 0:
-                dets = np.empty((0, 6))
-            
-            if self.per_class:
-                # Initialize an array to store the tracks for each class
-                per_class_tracks = []
-                
-                # same frame count for all classes
-                frame_count = self.frame_count
-
-                for cls_id in range(self.nr_classes):
-                    # Get detections and embeddings for the current class
-                    class_dets, class_embs = self.get_class_dets_n_embs(dets, embs, cls_id)
-                    
-                    LOGGER.debug(f"Processing class {int(cls_id)}: {class_dets.shape} with embeddings {class_embs.shape if class_embs is not None else None}")
-
-                    # Activate the specific active tracks for this class id
-                    self.active_tracks = self.per_class_active_tracks[cls_id]
-                    
-                    # Reset frame count for every class
-                    self.frame_count = frame_count
-                    
-                    # Update detections using the decorated method
-                    tracks = update_method(self, dets=class_dets, img=img, embs=class_embs)
-
-                    # Save the updated active tracks
-                    self.per_class_active_tracks[cls_id] = self.active_tracks
-
-                    if tracks.size > 0:
-                        per_class_tracks.append(tracks)
-                
-                # Increase frame count by 1
-                self.frame_count = frame_count + 1
-
-                return np.vstack(per_class_tracks) if per_class_tracks else np.empty((0, 8))
-            else:
-                # Process all detections at once if per_class is False
-                return update_method(self, dets=dets, img=img, embs=embs)
-        return wrapper
 
     @setup_decorator
     @per_class_decorator
@@ -940,6 +809,7 @@ class OcSort(ABC):
         Returns the a similar array, where the last column is the object ID.
         NOTE: The number of objects returned may differ from the number of detections provided.
         """
+        # import pdb; pdb.set_trace()
         self.check_inputs(dets, img)
 
         self.frame_count += 1
@@ -988,6 +858,7 @@ class OcSort(ABC):
         """
             First round of association
         """
+        # pdb.set_trace()
         matched, unmatched_dets, unmatched_trks = associate(
             dets[:, 0:5+self.is_obb], trks, self.asso_func, self.asso_threshold, velocities, k_observations, self.inertia, w, h
         )
@@ -1058,7 +929,8 @@ class OcSort(ABC):
         # create and initialise new trackers for unmatched detections
         for i in unmatched_dets:
             if self.is_obb:
-                trk = KalmanBoxTrackerOBB(dets[i, :-2], dets[i, -2], dets[i, -1], delta_t=self.delta_t, Q_xy_scaling=self.Q_xy_scaling, Q_a_scaling=self.Q_s_scaling, max_obs=self.max_obs)
+                # trk = KalmanBoxTrackerOBB(dets[i, :-2], dets[i, -2], dets[i, -1], delta_t=self.delta_t, Q_xy_scaling=self.Q_xy_scaling, Q_a_scaling=self.Q_s_scaling, max_obs=self.max_obs)
+                raise NotImplementedError("OBB KalmanBoxTracker is not implemented yet.")
             else:
                 trk = KalmanBoxTracker(dets[i, :5], dets[i, 5], dets[i, 6], delta_t=self.delta_t, Q_xy_scaling=self.Q_xy_scaling, Q_s_scaling=self.Q_s_scaling, max_obs=self.max_obs)
             self.active_tracks.append(trk)
@@ -1088,27 +960,6 @@ class OcSort(ABC):
         if len(ret) > 0:
             return np.concatenate(ret)
         return np.array([])
-
-    def get_class_dets_n_embs(self, dets, embs, cls_id):
-        # Initialize empty arrays for detections and embeddings
-        class_dets = np.empty((0, 6))
-        class_embs = np.empty((0, self.last_emb_size)) if self.last_emb_size is not None else None
-
-        # Check if there are detections
-        if dets.size > 0:
-            class_indices = np.where(dets[:, 5] == cls_id)[0]
-            class_dets = dets[class_indices]
-            
-            if embs is not None:
-                # Assert that if embeddings are provided, they have the same number of elements as detections
-                assert dets.shape[0] == embs.shape[0], "Detections and embeddings must have the same number of elements when both are provided"
-                
-                if embs.size > 0:
-                    class_embs = embs[class_indices]
-                    self.last_emb_size = class_embs.shape[1]  # Update the last known embedding size
-                else:
-                    class_embs = None
-        return class_dets, class_embs
 
     def check_inputs(self, dets, img):
         assert isinstance(
@@ -1363,6 +1214,7 @@ class OcSort(ABC):
         Returns:
         - np.ndarray: The image array with the bounding box drawn on it.
         """
+        # pdb.set_trace()
         if self.is_obb:
             
             angle = box[4] * 180.0 / np.pi  # Convert radians to degrees
@@ -1439,6 +1291,8 @@ class OcSort(ABC):
                     thickness=trajectory_thickness
                 )
         return img
+
+
 
 
     def plot_plain_results(self, img: np.ndarray, show_trajectories: bool, thickness: int = 2, fontscale: float = 0.5) -> np.ndarray:
@@ -1568,6 +1422,7 @@ class OcSort(ABC):
 
         AD_list = []
         info_list = []
+        # pdb.set_trace()
         for a in self.active_tracks:
             match_rules = []
             if a.history_observations:
@@ -1584,6 +1439,8 @@ class OcSort(ABC):
                     rules = " ".join(match_rules)
                     AD_list.append([a, rules])
 
+        # if len(AD_list) > 0:
+        #     pdb.set_trace()  
         return AD_list, info_list
 
 
@@ -1608,6 +1465,7 @@ class OcSort(ABC):
             a = a[0]
             if a.history_observations:
                 if len(a.history_observations) > 2:
+                    # pdb.set_trace()
                     box = a.history_observations[-1]
                     img = self.plot_box_on_img_with_rule(img, box, a.conf, a.cls, a.id, thickness, fontscale, rule=rule)
                     if show_trajectories:
@@ -1638,7 +1496,6 @@ class OcSort(ABC):
                 results[f'obj{a.id}'] = result
 
         return results
-
 
     def min_dist(self, history_observations, track_id):
         """window_size下的各点间最小欧氏距离"""
@@ -1892,8 +1749,6 @@ class OcSort(ABC):
         # If not enough history_observations for a full window
         return False, INFO
 
-
-
 def create_tracker(
         tracker_type, tracker_config=None, reid_weights=None, device=None, half=None, per_class=None,
         evolve_param_dict=None,
@@ -1923,4 +1778,5 @@ def create_tracker(
         tracker_args = evolve_param_dict
 
     tracker_args['per_class'] = per_class
+    # pdb.set_trace()
     return OcSort(**tracker_args)

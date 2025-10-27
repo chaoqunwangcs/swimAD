@@ -27,15 +27,18 @@ logger = logging.getLogger(__name__)
 from ultralytics.data.augment import classify_transforms
 from ultralytics.engine.predictor import STREAM_WARNING
 
-from tracking.ocsort import create_tracker
-from boxmot.utils import ROOT, WEIGHTS, TRACKER_CONFIGS
-from boxmot.utils.checks import RequirementsChecker
 from tracking.detectors import (get_yolo_inferer, default_imgsz,
                                 is_ultralytics_model, is_yolox_model)
 
-checker = RequirementsChecker()
-checker.check_packages(('ultralytics @ git+https://github.com/mikel-brostrom/ultralytics.git',))  # install
+# define path
+from pathlib import Path
+FILE = Path(__file__).resolve()
+ROOT = FILE.parents[1]  # root directory
+WEIGHTS = ROOT / "tracking" / "weights"
+TRACKER_CONFIGS = ROOT / "boxmot" / "configs"
 
+
+from tracking.ocsort import create_tracker
 from ultralytics import YOLO
 from ultralytics.models import yolo
 from ultralytics.cfg import get_cfg, get_save_dir
@@ -79,8 +82,6 @@ from boxmot.multi_view_association.test_stream_split import MultiViewAssociation
 
 import pdb
 
-
-TRACKERS = ['bytetrack', 'botsort', 'strongsort', 'ocsort', 'deepocsort', 'hybridsort', 'imprassoc', 'boosttrack']
 
 def plot_ids(
         result,
@@ -709,9 +710,6 @@ def on_predict_start(predictor, persist=False):
         persist (bool, optional): Whether to persist the trackers if they already exist. Defaults to False.
     """
 
-    assert predictor.custom_args.tracking_method in TRACKERS, \
-        f"'{predictor.custom_args.tracking_method}' is not supported. Supported ones are {TRACKERS}"
-
     tracking_config = TRACKER_CONFIGS / (predictor.custom_args.tracking_method + '.yaml')
     trackers = []
     for i in range(predictor.dataset.bs):
@@ -1153,7 +1151,7 @@ def run(args):
         canvas = cv2.resize(canvas, None, fx=resize_factor, fy=resize_factor, interpolation=cv2.INTER_LINEAR)
 
         cv2.imwrite('aa.jpg', canvas)
-        pdb.set_trace()
+        # pdb.set_trace()
         # swim AD rules:
         swimAD_results = yolo.predictor.trackers[0].detect_AD_v2(yolo.predictor.object_map, args.metrics)
 

@@ -13,6 +13,9 @@ class BaseRules(ABC):
     def __init__(self):
         pass
 
+    def obs_len(self, history_observations, track_id):
+        return len(history_observations)
+
     def min_dist(self, history_observations, track_id):
         """window_size下的各点间最小欧氏距离"""
         if len(history_observations) < 2:

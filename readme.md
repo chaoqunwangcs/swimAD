@@ -104,6 +104,9 @@
     ```
     python -m tracking.track_v0702 --source ../dataset/dataset_v20250506/afternoon --yolo-model /home/chaoqunwang/swimAD/yolo_train/runs/detect/11L_v0630+0630shuffle_bs64/weights/best.pt --tracking-method ocsort --save-video --device 1 --save-video --save --show-trajectories --log-path log.json --metrics min_dist,max_dist
     ```
+    ```
+    python -m tracking.track_v0702 --source ../dataset/dataset_v20251115/morning/ --yolo-model ../ckpts/best.pt --tracking-method ocsort --save-video --device 0 --save --show-trajectories --log-path log.json --metrics obs_len
+    ```
     输出各个指标，可视化用于总结规则
     
     #### TODO List
